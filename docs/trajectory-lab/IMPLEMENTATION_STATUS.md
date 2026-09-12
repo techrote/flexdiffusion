@@ -2,43 +2,66 @@
 
 ## Current branch state
 
-The first narrow backend plumbing pass is implemented on the trajectory development branch.
+The SD1.x/classic trajectory work is now split into two stacked changes:
 
-Completed:
+1. bootstrap capture plumbing (`trajectory-capture-bootstrap`);
+2. persisted checkpoint artefacts (`trajectory-artifacts`).
+
+The bootstrap PR has passing lightweight CI and is ready for review. The artefact branch also has passing dependency-light unit tests, but still requires its first real SD1.x GPU validation before it should be treated as stable.
+
+## Implemented
 
 - default-off `TrajectoryData` render configuration;
 - one-based exact/range/percentage capture schedule compiler;
-- incremental atomic manifest recorder;
-- classic-backend capability declaration;
-- request plumbing that sends trajectory options only to capable backends;
-- classic `sdkit` callback tap that observes live latent tensors without retaining them;
-- interrupted/failed/completed manifest status handling;
-- pure unit tests for schedules, config parsing and manifest recording;
+- classic-backend-only trajectory capability routing;
+- live classic-`sdkit` latent callback interception;
+- atomic versioned trajectory manifests;
+- interruption/failure/completion status handling;
+- selected latent snapshots detached and copied to owned CPU tensors;
+- latent persistence as non-pickle `.safetensors` artefacts;
+- optional checkpoint preview persistence (JPEG/PNG/WebP);
+- preview decode only at requested checkpoints, independent of Easy Diffusion's browser live-preview interval;
+- reuse of an already-requested Easy Diffusion live preview to avoid duplicate VAE decode at the same step;
+- bounded single-writer queue with explicit blocking backpressure (requested checkpoints are never silently dropped);
+- configurable queue depth and storage budget;
+- per-artefact SHA-256, byte counts and relative paths in the manifest;
+- all-or-error cleanup for a multi-file checkpoint if a staged/commit operation fails;
+- pure unit tests for schedules, config parsing, recorder state, writer commit, hashes and storage-budget failure;
 - lightweight GitHub Actions unit-test workflow;
 - upstream baseline/callback semantics recorded.
 
-Not yet implemented:
-
-- latent tensor persistence;
-- preview persistence independent of Easy Diffusion live preview;
-- bounded asynchronous writer queue/backpressure;
-- storage budget enforcement beyond checkpoint count;
-- UI controls/viewer;
-- resume/branch semantics;
-- sampler-state classification.
-
 ## Important semantic boundary
 
-The current recorder is intentionally **manifest-only**. A captured checkpoint currently proves that the requested callback boundary was observed and records tensor shape/dtype/device metadata. It does not yet claim to contain a restartable latent artefact.
+Persisting the latent does **not** yet imply that a sampler can resume exactly from that checkpoint.
 
-Normal generation takes the upstream path when `trajectory.enabled` is false. Trajectory-specific kwargs are not sent to backends unless they explicitly advertise trajectory capture capability.
+The manifest therefore records `resume_fidelity: UNCLASSIFIED`. Stage 3 must determine the extra solver state required by each sampler and prove resume fidelity numerically. The current classic k-diffusion adapter forwards only the latent and callback index to Easy Diffusion; it discards the rest of k-diffusion's callback state.
 
-## Next implementation pass
+Checkpoint previews are raw decoded trajectory artefacts, not final post-filtered Easy Diffusion outputs. They are intended for trajectory inspection and later branching research.
 
-1. persist selected latents by detaching and copying them to CPU at capture points;
-2. move disk writes to a bounded worker queue;
-3. implement explicit backpressure/error policy;
-4. persist requested decoded previews only at capture points;
-5. add hashes/paths to checkpoint manifest records;
-6. perform a fixed-seed no-capture vs capture GPU comparison on GTX 1650 Super;
-7. measure dense-capture VRAM/RAM/disk behaviour before adding UI.
+Normal generation still follows the upstream call path when `trajectory.enabled` is false. No checkpoint writer or trajectory filesystem I/O exists in that mode.
+
+## Not yet implemented / not yet validated
+
+- real-GPU validation on GTX 1650 Super and Quadro RTX 4000;
+- measured dense-capture VRAM/RAM/disk/timing overhead;
+- sampler sigma/timestep and multistep solver-state capture;
+- exact/approximate resume classification;
+- branch DAG persistence and lineage operations;
+- trajectory viewer/jog/scrub UI;
+- insert-edit operations and image/latent interventions;
+- GIMP/GEGL bridge;
+- other Easy Diffusion engines or K80 support.
+
+## Next gate
+
+Run the fixed-seed GTX 1650 Super protocol in `TESTING.md` using SD1.4/SD1.x:
+
+1. trajectory disabled baseline;
+2. latent-only sparse capture;
+3. preview-only sparse capture;
+4. hybrid sparse capture;
+5. dense every-step capture;
+6. interrupted capture;
+7. deliberately tiny storage-budget failure.
+
+Verify final-image determinism where the sampler itself is deterministic, manifest/artifact integrity, bounded host/GPU memory, and expected timing cost. Do not begin exact-resume work until this capture gate passes.
