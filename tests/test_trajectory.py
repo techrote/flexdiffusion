@@ -86,6 +86,7 @@ class TrajectoryConfigTests(unittest.TestCase):
                     "capture_schedule": "5,10,100%",
                     "persistence_mode": "latent",
                     "max_checkpoints": 8,
+                    "storage_budget_mb": 0.01,
                     "writer_queue_size": 1,
                 }
             }
@@ -94,6 +95,7 @@ class TrajectoryConfigTests(unittest.TestCase):
         self.assertEqual(task.trajectory.capture_schedule, "5,10,100%")
         self.assertEqual(task.trajectory.persistence_mode, "latent")
         self.assertEqual(task.trajectory.max_checkpoints, 8)
+        self.assertAlmostEqual(task.trajectory.storage_budget_mb, 0.01)
         self.assertEqual(task.trajectory.writer_queue_size, 1)
 
 
@@ -273,18 +275,18 @@ class ArtifactWriterTests(unittest.TestCase):
                 self.assertEqual(len(preview["sha256"]), 64)
             self.assertEqual(writer.bytes_committed, result["bytes"])
 
-    def test_storage_budget_failure_leaves_no_committed_artifact(self):
+    def test_fractional_storage_budget_failure_leaves_no_committed_artifact(self):
         results = []
 
         def oversized_latent_saver(value, path):
             with open(path, "wb") as handle:
-                handle.write(b"x" * (1024 * 1024 + 1))
+                handle.write(b"x" * 2048)
 
         with tempfile.TemporaryDirectory() as tmp:
             writer = ArtifactWriter(
                 tmp,
                 queue_size=1,
-                storage_budget_mb=1,
+                storage_budget_mb=0.001,
                 on_result=lambda checkpoint_id, result, error: results.append((checkpoint_id, result, error)),
                 latent_saver=oversized_latent_saver,
             )
