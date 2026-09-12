@@ -29,6 +29,16 @@ import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
+def _request_raw(url: str, timeout: float = 30.0) -> bytes:
+    req = urllib.request.Request(url, headers={"Accept": "*/*"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code} from {url}: {detail}") from exc
+
+
 def _request_json(url: str, payload: Optional[Dict[str, Any]] = None, timeout: float = 30.0) -> Dict[str, Any]:
     data = None
     headers = {"Accept": "application/json"}
@@ -66,10 +76,39 @@ def _sha256_file(path: str) -> str:
     return digest.hexdigest()
 
 
+def _drain_stream_once(stream_url: str) -> None:
+    """Drain queued progress chunks so Easy Diffusion can reach completed state.
+
+    Easy Diffusion reports a completed render task as ``buffer`` while its
+    response/progress queue still contains entries. The normal browser consumes
+    that queue continuously. This headless harness must do the same or a poller
+    that waits for ``completed`` can deadlock indefinitely.
+
+    The streamed body may contain multiple concatenated JSON fragments, so it is
+    intentionally discarded here. The final cached task response remains
+    available from the same endpoint after the queue is empty and the task lock
+    has been released.
+    """
+
+    try:
+        _request_raw(stream_url, timeout=5.0)
+    except RuntimeError as exc:
+        # HTTP 425 means the task has not started yet and is harmless while
+        # polling. Anything else indicates a real server/API problem.
+        if "HTTP 425" not in str(exc):
+            raise
+
+
 def _wait_for_task(base_url: str, session_id: str, task_id: int, stream_path: str, timeout: float) -> Dict[str, Any]:
     deadline = time.time() + timeout
     status = "pending"
+    stream_url = base_url + stream_path
+
     while time.time() < deadline:
+        # Drain progress/final queue fragments first, matching what the browser
+        # normally does. This allows Task.status to transition buffer->completed.
+        _drain_stream_once(stream_url)
+
         ping_url = f"{base_url}/ping?{urllib.parse.urlencode({'session_id': session_id})}"
         ping = _request_json(ping_url)
         tasks = ping.get("tasks", {})
@@ -82,10 +121,8 @@ def _wait_for_task(base_url: str, session_id: str, task_id: int, stream_path: st
     else:
         raise TimeoutError(f"task {task_id} did not complete within {timeout:.1f}s (last status={status})")
 
-    # Once complete and its queue has drained, Easy Diffusion serves the cached
-    # final response as ordinary JSON from the stream endpoint. Retry briefly
-    # because task status and cache visibility can cross by a few milliseconds.
-    stream_url = base_url + stream_path
+    # Once the task lock is released and its queue is empty, Easy Diffusion
+    # serves the cached final response as one ordinary JSON object.
     for _ in range(40):
         try:
             return _request_json(stream_url, timeout=30.0)
@@ -198,7 +235,9 @@ def _trajectory_for(mode: str, root: str, steps: int) -> Optional[Dict[str, Any]
         config["project_name"] = "smoke-budget"
         config["preview_format"] = "png"
         config["writer_queue_size"] = 1
-        config["storage_budget_mb"] = 1
+        # Deliberately tiny so the first 512x512 PNG checkpoint should exceed it
+        # regardless of image compressibility, exercising the budget failure path.
+        config["storage_budget_mb"] = 0.01
     return config
 
 
