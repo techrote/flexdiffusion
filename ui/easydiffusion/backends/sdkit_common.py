@@ -127,29 +127,30 @@ def generate_images(
         }
         trajectory_recorder = TrajectoryRecorder(trajectory, total_steps, run_metadata=run_metadata)
 
-    gc(context)
-
-    context.stop_processing = False
-
-    if req["control_image"] and controlnet_filter:
-        controlnet_filter = convert_ED_controlnet_filter_name(controlnet_filter)
-        req["control_image"] = filter_images(context, req["control_image"], controlnet_filter)[0]
-
-    callback = make_step_callback(context, callback, trajectory_recorder=trajectory_recorder)
-
+    images = []
     try:
+        gc(context)
+        context.stop_processing = False
+
+        if req["control_image"] and controlnet_filter:
+            controlnet_filter = convert_ED_controlnet_filter_name(controlnet_filter)
+            req["control_image"] = filter_images(context, req["control_image"], controlnet_filter)[0]
+
+        callback = make_step_callback(context, callback, trajectory_recorder=trajectory_recorder)
         images = generate_images(context, callback=callback, **req)
         trajectory_status = "complete"
     except UserInitiatedStop:
         trajectory_status = "interrupted"
+        partial_x_samples = getattr(context, "partial_x_samples", None)
         images = []
-        if context.partial_x_samples is not None:
+        if partial_x_samples is not None:
             if context.test_diffusers:
-                images = diffusers_latent_samples_to_images(context, context.partial_x_samples)
+                images = diffusers_latent_samples_to_images(context, partial_x_samples)
             else:
-                images = latent_samples_to_images(context, context.partial_x_samples)
+                images = latent_samples_to_images(context, partial_x_samples)
     finally:
-        if hasattr(context, "partial_x_samples") and context.partial_x_samples is not None:
+        partial_x_samples = getattr(context, "partial_x_samples", None)
+        if partial_x_samples is not None:
             if not context.test_diffusers:
                 del context.partial_x_samples
             context.partial_x_samples = None
@@ -158,9 +159,9 @@ def generate_images(
             try:
                 trajectory_recorder.finish(status=trajectory_status)
             except Exception as e:
-                # Trajectory recording is auxiliary. A manifest finalisation error
-                # must be visible, but must not destroy a successfully generated image.
-                log.error(f"Trajectory manifest finalisation failed: {e}")
+                # Trajectory persistence is auxiliary. Finalisation failures are
+                # visible in logs but must not destroy an otherwise valid render.
+                log.error(f"Trajectory finalisation failed: {e}")
 
     gc(context)
 
@@ -257,8 +258,22 @@ def list_controlnet_filters():
 def make_step_callback(context, callback, trajectory_recorder=None):
     capture_failed = False
 
-    def on_step(x_samples, i, *args):
+    def decode_current_latent():
+        if context.test_diffusers:
+            return diffusers_latent_samples_to_images(context, context.partial_x_samples)
+        return latent_samples_to_images(context, context.partial_x_samples)
+
+    def note_capture_failure(i, error):
         nonlocal capture_failed
+        capture_failed = True
+        log.error(f"Trajectory checkpoint capture failed at callback step {i}: {error}")
+        if trajectory_recorder is not None:
+            try:
+                trajectory_recorder.note_error(f"checkpoint callback {i}: {type(error).__name__}: {error}")
+            except Exception as manifest_error:
+                log.error(f"Trajectory recorder could not persist its error state: {manifest_error}")
+
+    def on_step(x_samples, i, *args):
         stream_image_progress = opts.get("stream_image_progress", False)
         stream_image_progress_interval = opts.get("stream_image_progress_interval", 3)
 
@@ -267,27 +282,48 @@ def make_step_callback(context, callback, trajectory_recorder=None):
         else:
             context.partial_x_samples = x_samples
 
-        if trajectory_recorder is not None and not capture_failed:
-            try:
-                trajectory_recorder.record_step(i, x_samples)
-            except Exception as e:
-                capture_failed = True
-                log.error(f"Trajectory checkpoint recording failed at callback step {i}: {e}")
-                try:
-                    trajectory_recorder.note_error(f"checkpoint callback {i}: {e}")
-                except Exception as manifest_error:
-                    log.error(f"Trajectory recorder could not persist its error state: {manifest_error}")
+        live_preview_requested = (
+            stream_image_progress
+            and stream_image_progress_interval > 0
+            and i % stream_image_progress_interval == 0
+        )
+        trajectory_requested = (
+            trajectory_recorder is not None
+            and not capture_failed
+            and trajectory_recorder.wants_callback_index(i)
+        )
+        trajectory_preview_requested = trajectory_requested and trajectory_recorder.wants_preview
 
-        if stream_image_progress and stream_image_progress_interval > 0 and i % stream_image_progress_interval == 0:
-            if context.test_diffusers:
-                images = diffusers_latent_samples_to_images(context, context.partial_x_samples)
-            else:
-                images = latent_samples_to_images(context, context.partial_x_samples)
-        else:
-            images = None
+        live_images = None
+        trajectory_images = None
+
+        if live_preview_requested:
+            # Preserve upstream behaviour: failures in the explicitly requested
+            # Easy Diffusion live preview are generation errors.
+            live_images = decode_current_latent()
+            if trajectory_preview_requested:
+                trajectory_images = live_images
+        elif trajectory_preview_requested:
+            # Trajectory preview persistence is auxiliary. A VAE decode failure
+            # disables further trajectory capture but does not kill the render.
+            try:
+                trajectory_images = decode_current_latent()
+            except Exception as error:
+                note_capture_failure(i, error)
+                trajectory_requested = False
+
+        if trajectory_requested:
+            try:
+                trajectory_recorder.capture_step(
+                    i,
+                    x_samples,
+                    preview_images=trajectory_images,
+                )
+            except Exception as error:
+                note_capture_failure(i, error)
 
         if callback:
-            callback(images, i, *args)
+            callback(live_images, i, *args)
 
         if context.stop_processing:
             raise UserInitiatedStop("User requested that we stop processing")
