@@ -255,7 +255,15 @@ def generate_images_internal(
         clip_skip=2 if task_data.clip_skip else 1,
     )
 
-    images = backend.generate_images(context, callback=callback, output_type="base64", **req.dict())
+    generate_kwargs = req.dict()
+    trajectory = getattr(task_data, "trajectory", None)
+    if trajectory is not None and trajectory.enabled:
+        capabilities = getattr(backend, "ed_info", {}).get("capabilities", {})
+        if not capabilities.get("trajectory_capture", False):
+            raise RuntimeError("The selected Easy Diffusion backend does not support trajectory capture")
+        generate_kwargs["trajectory"] = trajectory.dict()
+
+    images = backend.generate_images(context, callback=callback, output_type="base64", **generate_kwargs)
 
     return images
 
