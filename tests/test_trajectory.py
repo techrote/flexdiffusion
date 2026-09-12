@@ -15,6 +15,7 @@ from easydiffusion.trajectory import (  # noqa: E402
     TrajectoryRecorder,
     compile_capture_schedule,
 )
+from easydiffusion.types import RenderTaskData  # noqa: E402
 
 
 class CaptureScheduleTests(unittest.TestCase):
@@ -66,6 +67,29 @@ class CaptureScheduleTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(CaptureScheduleError):
                     compile_capture_schedule("1", value)
+
+
+class TrajectoryConfigTests(unittest.TestCase):
+    def test_render_task_defaults_to_trajectory_disabled(self):
+        task = RenderTaskData()
+        self.assertFalse(task.trajectory.enabled)
+        self.assertEqual(task.trajectory.capture_schedule, "")
+
+    def test_nested_trajectory_config_is_parsed(self):
+        task = RenderTaskData.parse_obj(
+            {
+                "trajectory": {
+                    "enabled": True,
+                    "capture_schedule": "5,10,100%",
+                    "persistence_mode": "latent",
+                    "max_checkpoints": 8,
+                }
+            }
+        )
+        self.assertTrue(task.trajectory.enabled)
+        self.assertEqual(task.trajectory.capture_schedule, "5,10,100%")
+        self.assertEqual(task.trajectory.persistence_mode, "latent")
+        self.assertEqual(task.trajectory.max_checkpoints, 8)
 
 
 class _FakeTensor:

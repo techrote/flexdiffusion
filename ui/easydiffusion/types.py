@@ -1,6 +1,7 @@
 from typing import Any, List, Dict, Union
 
 from pydantic import BaseModel
+from easydiffusion.trajectory_types import TrajectoryData
 
 
 class GenerateImageRequest(BaseModel):
@@ -98,6 +99,7 @@ class RenderTaskData(TaskData):
     clip_skip: bool = False
     codeformer_upscale_faces: bool = False
     codeformer_fidelity: float = 0.5
+    trajectory: TrajectoryData = TrajectoryData()
 
 
 class MergeRequest(BaseModel):
