@@ -8,6 +8,7 @@ writer never retains a live CUDA tensor or computation graph.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import queue
 import tempfile
@@ -15,6 +16,7 @@ import threading
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 
+log = logging.getLogger(__name__)
 _SENTINEL = object()
 _PREVIEW_FORMATS = {
     "jpeg": ("JPEG", "jpg"),
@@ -170,9 +172,9 @@ class ArtifactWriter:
         try:
             self.on_result(checkpoint_id, result, error)
         except Exception:
-            # A manifest callback must never kill the writer thread. The caller
-            # owns logging/recovery for manifest-specific failures.
-            pass
+            # A manifest callback must never kill the writer thread, but it must
+            # also not fail invisibly.
+            log.exception("Trajectory artifact result callback failed")
 
     def _write_job(self, job: Dict[str, Any]) -> Dict[str, Any]:
         checkpoint_id = job["checkpoint_id"]
@@ -246,12 +248,16 @@ class ArtifactWriter:
                 "bytes": job_bytes,
             }
         except Exception:
+            # If committing one member of a multi-file checkpoint fails, remove
+            # any files already committed by this job as well as remaining temp
+            # files. The manifest will then correctly report the whole
+            # checkpoint as failed instead of pointing at a partial artefact set.
             for item in staged:
-                if not item.get("committed"):
-                    try:
-                        os.unlink(item["temp_path"])
-                    except OSError:
-                        pass
+                path = item["final_path"] if item.get("committed") else item["temp_path"]
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
             raise
 
     def _stage_file(
