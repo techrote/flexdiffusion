@@ -81,7 +81,7 @@ class ArtifactWriter:
         preview_format: str = "jpeg",
         preview_quality: int = 75,
         queue_size: int = 2,
-        storage_budget_mb: Optional[int] = None,
+        storage_budget_mb: Optional[float] = None,
         on_result: Optional[Callable[[str, Dict[str, Any], Optional[str]], None]] = None,
         latent_saver: Optional[Callable[[Any, str], None]] = None,
         preview_saver: Optional[Callable[[Any, str, str, int], None]] = None,
@@ -94,14 +94,16 @@ class ArtifactWriter:
         if not isinstance(preview_quality, int) or isinstance(preview_quality, bool) or not 1 <= preview_quality <= 100:
             raise ValueError("trajectory preview_quality must be an integer in 1..100")
         if storage_budget_mb is not None:
-            storage_budget_mb = int(storage_budget_mb)
+            storage_budget_mb = float(storage_budget_mb)
             if storage_budget_mb <= 0:
                 raise ValueError("trajectory storage_budget_mb must be positive when set")
 
         self.run_dir = os.path.abspath(run_dir)
         self.preview_format = preview_format
         self.preview_quality = preview_quality
-        self.storage_budget_bytes = None if storage_budget_mb is None else storage_budget_mb * 1024 * 1024
+        self.storage_budget_bytes = (
+            None if storage_budget_mb is None else max(1, int(storage_budget_mb * 1024 * 1024))
+        )
         self.on_result = on_result
         self.latent_saver = latent_saver or _default_latent_saver
         self.preview_saver = preview_saver or _default_preview_saver
