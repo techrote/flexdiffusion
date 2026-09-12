@@ -261,14 +261,29 @@ class TrajectoryRecorder:
         if self.capture_steps:
             from easydiffusion.trajectory_artifacts import ArtifactWriter
 
-            self._artifact_writer = ArtifactWriter(
-                run_dir=self.run_dir,
-                preview_format=self.config.get("preview_format", "jpeg"),
-                preview_quality=int(self.config.get("preview_quality", 75)),
-                queue_size=int(self.config.get("writer_queue_size", 2)),
-                storage_budget_mb=self.config.get("storage_budget_mb"),
-                on_result=self._on_artifact_result,
-            )
+            try:
+                self._artifact_writer = ArtifactWriter(
+                    run_dir=self.run_dir,
+                    preview_format=self.config.get("preview_format", "jpeg"),
+                    preview_quality=int(self.config.get("preview_quality", 75)),
+                    queue_size=int(self.config.get("writer_queue_size", 2)),
+                    storage_budget_mb=self.config.get("storage_budget_mb"),
+                    on_result=self._on_artifact_result,
+                )
+            except Exception as exc:
+                # The initial manifest already exists at this point. Finalise it
+                # explicitly so a configuration/initialisation failure never
+                # leaves a misleading forever-"recording" run behind.
+                with self._lock:
+                    message = f"artifact writer initialisation failed: {type(exc).__name__}: {exc}"
+                    self._error_messages.append(message)
+                    self.manifest["status"] = "initialisation_failed"
+                    self.manifest["errors"] = list(self._error_messages)
+                    self.manifest["updated_at"] = _utc_now()
+                    self.manifest["completed_at"] = _utc_now()
+                    self._closed = True
+                    self._flush_manifest_locked()
+                raise
 
     @property
     def wants_latent(self) -> bool:
