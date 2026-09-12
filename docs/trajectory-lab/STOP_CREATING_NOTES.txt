@@ -1,1 +1,0 @@
-The next action is to open the bootstrap PR; no more bootstrap note files are needed.
