@@ -12,5 +12,5 @@ class TrajectoryData(BaseModel):
     preview_format: str = "jpeg"
     preview_quality: int = 75
     max_checkpoints: int = None
-    storage_budget_mb: int = None
+    storage_budget_mb: float = None
     writer_queue_size: int = 2
