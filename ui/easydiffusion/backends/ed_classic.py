@@ -21,6 +21,10 @@ ed_info = {
     "name": "Classic backend for Easy Diffusion v2",
     "version": (1, 0, 0),
     "type": "backend",
+    "capabilities": {
+        "trajectory_capture": True,
+        "trajectory_resume": False,
+    },
 }
 
 
