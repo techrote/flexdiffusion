@@ -108,6 +108,7 @@ class ArtifactWriter:
         self._queue: queue.Queue = queue.Queue(maxsize=queue_size)
         self._bytes_committed = 0
         self._closed = False
+        self._callback_errors: List[str] = []
         self._thread = threading.Thread(
             target=self._worker,
             name="trajectory-artifact-writer",
@@ -148,6 +149,8 @@ class ArtifactWriter:
         self._queue.put(_SENTINEL)
         self._thread.join()
         self._closed = True
+        if self._callback_errors:
+            raise RuntimeError("; ".join(self._callback_errors))
 
     def _worker(self) -> None:
         while True:
@@ -171,10 +174,13 @@ class ArtifactWriter:
             return
         try:
             self.on_result(checkpoint_id, result, error)
-        except Exception:
+        except Exception as exc:
             # A manifest callback must never kill the writer thread, but it must
-            # also not fail invisibly.
-            log.exception("Trajectory artifact result callback failed")
+            # also not fail invisibly. ``close`` will surface the accumulated
+            # error to the recorder after all queued writes have drained.
+            message = f"artifact result callback failed for {checkpoint_id}: {type(exc).__name__}: {exc}"
+            self._callback_errors.append(message)
+            log.exception(message)
 
     def _write_job(self, job: Dict[str, Any]) -> Dict[str, Any]:
         checkpoint_id = job["checkpoint_id"]
