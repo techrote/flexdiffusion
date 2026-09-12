@@ -94,6 +94,12 @@ def generate_images(
     trajectory_recorder = None
     trajectory_status = "failed"
 
+    # The classic backend forces img2img through DDIM. Apply that rule before
+    # trajectory metadata is frozen so manifests record the effective sampler,
+    # not merely the sampler requested by the caller.
+    if req["init_image"] is not None and not context.test_diffusers:
+        req["sampler_name"] = "ddim"
+
     if trajectory and trajectory.get("enabled", False):
         from easydiffusion.trajectory import TrajectoryRecorder
 
@@ -120,9 +126,6 @@ def generate_images(
             "sampler_name": req.get("sampler_name"),
         }
         trajectory_recorder = TrajectoryRecorder(trajectory, total_steps, run_metadata=run_metadata)
-
-    if req["init_image"] is not None and not context.test_diffusers:
-        req["sampler_name"] = "ddim"
 
     gc(context)
 
