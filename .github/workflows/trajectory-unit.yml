@@ -36,6 +36,7 @@ jobs:
         run: |
           node --check ui/plugins/ui/trajectory-output-steps.plugin.js
           node --check ui/plugins/ui/sampler-comparison.plugin.js
+          node --check ui/plugins/ui/review-capture.plugin.js
       - name: Check sampler comparison helper semantics
         run: |
           node <<'NODE'
@@ -45,6 +46,40 @@ jobs:
           assert.deepStrictEqual(helper('heun', ['dpmpp_2m', 'heun', 'euler']), ['heun', 'dpmpp_2m', 'euler'])
           assert.deepStrictEqual(helper('dpmpp_2m', []), ['dpmpp_2m'])
           assert.deepStrictEqual(helper('', ['heun', 'heun']), ['heun'])
+          NODE
+      - name: Check review capture helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/review-capture.plugin.js')
+          const helper = globalThis.__flexDiffusionReviewCaptureTest
+          const stamp = helper.makeTimestamp(new Date(2026, 8, 13, 17, 33, 4))
+          assert.strictEqual(stamp, '2026-09-13_17-33-04')
+          const markdown = helper.buildReviewMarkdown(
+            {
+              capture: { local_time: '2026-09-13 17:33:04' },
+              app: { backend: 'ed_classic' },
+              ui_state: { seed: '2', primary_sampler: 'heun', additional_samplers: ['dpmpp_2m'] },
+              tasks: [
+                {
+                  request: {
+                    prompt: 'cyberpunk dinosaur mercenary',
+                    seed: 2,
+                    sampler_name: 'heun',
+                    width: 512,
+                    height: 512,
+                    num_inference_steps: 20,
+                  },
+                  outputs: [],
+                },
+              ],
+            },
+            `${stamp}.png`
+          )
+          assert(markdown.includes('Rating (0-10)'))
+          assert(markdown.includes('Sampler: heun'))
+          assert(markdown.includes('```json'))
+          assert(markdown.includes(`${stamp}.png`))
           NODE
       - name: Parse Windows development setup helper
         shell: pwsh
