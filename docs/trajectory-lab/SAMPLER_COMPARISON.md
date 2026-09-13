@@ -20,4 +20,43 @@ If Heun removes a recurring artifact in the cyberdino reference, that is a legit
 
 Multi-sampler mode creates separate tasks; it does not try to splice different samplers into one trajectory. Therefore each sampler gets its own Output After Step observations and its own final output.
 
-The current Output After Step backend intentionally supports only the classified fixed-step k-diffusion subset. If an additional sampler is selected that is not yet supported by Output After Step while intermediate output is active, that task will fail explicitly rather than silently changing semantics.
+The current Output After Step backend intentionally supports only the classified fixed-step k-diffusion subset. If an additional sampler is selected that is not yet supported by Output After Step while intermediate output is active, that task fails explicitly rather than silently changing semantics.
+
+Current supported set:
+
+- `dpm2`
+- `dpm2_a`
+- `dpmpp_2m`
+- `dpmpp_2s_a`
+- `dpmpp_sde`
+- `euler`
+- `euler_a`
+- `heun`
+- `lms`
+
+### Confirmed compatibility-gate failures from the controlled sampler sweep
+
+These are **not sampler-generation failures**. They are confirmed rejections by FlexDiffusion's current Output After Step compatibility gate because their callback/step semantics have not yet been adapted:
+
+- `ddim`
+- `plms`
+- `dpm_adaptive`
+- `dpm_solver_stability`
+- UniPC family:
+  - `unipc_snr`
+  - `unipc_tu`
+  - `unipc_snr_2`
+  - `unipc_tu_2`
+  - `unipc_tq`
+
+Representative error:
+
+```text
+Error: Output After Step is not yet supported for sampler 'dpm_solver_stability'. Supported classic fixed-step k-diffusion samplers: dpm2, dpm2_a, dpmpp_2m, dpmpp_2s_a, dpmpp_sde, euler, euler_a, heun, lms
+```
+
+This distinction matters for the implementation plan: Easy Diffusion/sdkit already contains DDIM, PLMS, Stability DPM Solver and the UniPC implementations. Supporting them in Trajectory Lab primarily requires family-specific callback-state adapters, step-number classification, and clean-estimate extraction rather than implementing the samplers themselves.
+
+`dpm_adaptive` is a separate case because its adaptive step count does not naturally fit the current fixed `Output After Step = N` interpretation. It will need an explicit observation-index/solver-boundary policy before being enabled.
+
+Any additional failures from the same sweep should be appended here with the exact error so we can distinguish deliberate compatibility rejection from a genuine sampler/runtime fault.
