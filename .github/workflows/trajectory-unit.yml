@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - trajectory-lab
+      - trajectory-artifacts
   push:
     branches:
       - trajectory-lab
@@ -31,8 +32,20 @@ jobs:
           ui/easydiffusion/backends/sdkit_common.py
           ui/easydiffusion/tasks/render_images.py
           scripts/trajectory_smoke.py
-      - name: Check Output After Step UI plugin syntax
-        run: node --check ui/plugins/ui/trajectory-output-steps.plugin.js
+      - name: Check Trajectory Lab UI plugin syntax
+        run: |
+          node --check ui/plugins/ui/trajectory-output-steps.plugin.js
+          node --check ui/plugins/ui/sampler-comparison.plugin.js
+      - name: Check sampler comparison helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/sampler-comparison.plugin.js')
+          const helper = globalThis.__flexDiffusionSamplerComparisonTest.orderedUniqueSamplerNames
+          assert.deepStrictEqual(helper('heun', ['dpmpp_2m', 'heun', 'euler']), ['heun', 'dpmpp_2m', 'euler'])
+          assert.deepStrictEqual(helper('dpmpp_2m', []), ['dpmpp_2m'])
+          assert.deepStrictEqual(helper('', ['heun', 'heun']), ['heun'])
+          NODE
       - name: Parse Windows development setup helper
         shell: pwsh
         run: |
