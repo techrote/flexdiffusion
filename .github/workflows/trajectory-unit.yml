@@ -37,6 +37,30 @@ jobs:
           node --check ui/plugins/ui/trajectory-output-steps.plugin.js
           node --check ui/plugins/ui/sampler-comparison.plugin.js
           node --check ui/plugins/ui/review-capture.plugin.js
+      - name: Check sparse capture helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/trajectory-output-steps.plugin.js')
+          const helper = globalThis.__flexDiffusionSparseCaptureTest
+          const steps = helper.parseCaptureExpression('10, 16, 20-24', 30)
+          assert.deepStrictEqual(steps, [10, 16, 20, 21, 22, 23, 24])
+          assert.strictEqual(helper.formatCaptureSteps(steps), '10, 16, 20-24')
+          assert.deepStrictEqual(helper.endpointSolverSteps(steps, 30, true), [10, 24])
+          assert.strictEqual(
+            helper.encodeSparseTransport(steps, 30, true),
+            'sparse:10,16,20-24|endpoints=1'
+          )
+          assert.deepStrictEqual(helper.outputCountSummary(steps, 30, true), {
+            denoisedCount: 7,
+            solverCount: 2,
+            finalCount: 1,
+            totalOutputs: 10,
+          })
+          assert.deepStrictEqual(helper.endpointSolverSteps([16, 20], 20, true), [16])
+          assert.throws(() => helper.parseCaptureExpression('24-20', 30))
+          assert.throws(() => helper.parseCaptureExpression('31', 30))
+          NODE
       - name: Check sampler comparison helper semantics
         run: |
           node <<'NODE'
