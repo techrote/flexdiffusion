@@ -1,16 +1,22 @@
 """Transient intermediate-output capture helpers for classic SD1.x renders.
 
-This module deliberately contains no torch import so its step-selection semantics
-can be unit-tested in the dependency-light Trajectory Lab CI job.
+This module deliberately contains no torch import so its step-selection and
+representation semantics can be unit-tested in the dependency-light Trajectory
+Lab CI job.
 
 For the fixed-step k-diffusion samplers used by Easy Diffusion classic, callback
-index ``i`` observes the current latent *before* integration update ``i``.
+index ``i`` observes the current solver latent *before* integration update ``i``.
 Consequently callback index 0 is the initial latent (zero completed steps),
 callback index N is the state after N completed integration updates, and the
 sampler's normal return value is the only authoritative state after the final
 step. ``Output After Step`` therefore captures callback indexes
 ``start_step .. total_steps - 1`` and uses the ordinary final render for
 ``total_steps``.
+
+k-diffusion's callback also exposes ``denoised``: the model's current clean-image
+estimate at that same solver boundary. FlexDiffusion can retain either the raw
+solver state, the denoised estimate, or both, then VAE-decode the selected CPU
+snapshots after sampling has finished.
 """
 
 FIXED_STEP_K_DIFFUSION_SAMPLERS = frozenset(
@@ -26,6 +32,9 @@ FIXED_STEP_K_DIFFUSION_SAMPLERS = frozenset(
         "dpmpp_sde",
     }
 )
+
+INTERMEDIATE_REPRESENTATIONS = frozenset({"denoised", "solver_state", "both"})
+_REPRESENTATION_ORDER = {"denoised": 0, "solver_state": 1}
 
 
 def normalize_output_after_step(value, total_steps):
@@ -45,11 +54,29 @@ def normalize_output_after_step(value, total_steps):
     return max(1, min(value, total_steps))
 
 
+def normalize_intermediate_representation(value):
+    if value is None:
+        return "both"
+    value = str(value).strip().lower()
+    if value not in INTERMEDIATE_REPRESENTATIONS:
+        valid = ", ".join(sorted(INTERMEDIATE_REPRESENTATIONS))
+        raise ValueError(f"intermediate_representation must be one of: {valid}")
+    return value
+
+
 def flatten_output_step_results(results, seed, total_steps):
-    """Return (image, seed, metadata) tuples in chronological step order."""
+    """Return (image, seed, metadata) tuples in chronological display order."""
     flattened = []
-    for group in sorted(results or [], key=lambda item: int(item["step"])):
+    ordered = sorted(
+        results or [],
+        key=lambda item: (
+            int(item["step"]),
+            _REPRESENTATION_ORDER.get(item.get("representation"), 99),
+        ),
+    )
+    for group in ordered:
         step = int(group["step"])
+        representation = group.get("representation", "solver_state")
         for index, image in enumerate(group.get("images") or []):
             flattened.append(
                 (
@@ -59,18 +86,24 @@ def flatten_output_step_results(results, seed, total_steps):
                         "output_step": step,
                         "total_steps": int(total_steps),
                         "is_intermediate": True,
+                        "intermediate_representation": representation,
                     },
                 )
             )
     return flattened
 
 
-class OutputAfterStepCollector:
-    """Own selected callback latents on CPU until post-sampling decode."""
+def _owned_cpu_snapshot(tensor):
+    return tensor.detach().cpu().clone().contiguous()
 
-    def __init__(self, start_step, total_steps):
+
+class OutputAfterStepCollector:
+    """Own selected k-diffusion callback representations on CPU until decode."""
+
+    def __init__(self, start_step, total_steps, representation="both"):
         self.total_steps = int(total_steps)
         self.start_step = normalize_output_after_step(start_step, self.total_steps)
+        self.representation = normalize_intermediate_representation(representation)
         self._snapshots = []
         self._captured_steps = set()
 
@@ -91,15 +124,25 @@ class OutputAfterStepCollector:
 
         return self.start_step <= callback_index < self.total_steps
 
-    def capture_step(self, callback_index, x_samples):
+    def capture_step(self, callback_index, solver_state, denoised=None):
         callback_index = int(callback_index)
         if not self.wants_callback_index(callback_index):
             return False
         if callback_index in self._captured_steps:
             return False
 
-        snapshot = x_samples.detach().cpu().clone().contiguous()
-        self._snapshots.append((callback_index, snapshot))
+        if self.representation in ("denoised", "both"):
+            if denoised is None:
+                raise ValueError("k-diffusion callback did not provide a denoised estimate")
+            self._snapshots.append(
+                (callback_index, "denoised", _owned_cpu_snapshot(denoised))
+            )
+
+        if self.representation in ("solver_state", "both"):
+            self._snapshots.append(
+                (callback_index, "solver_state", _owned_cpu_snapshot(solver_state))
+            )
+
         self._captured_steps.add(callback_index)
         return True
 

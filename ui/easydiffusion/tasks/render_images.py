@@ -174,6 +174,7 @@ def make_images(
                 "output_step": req.num_inference_steps,
                 "total_steps": req.num_inference_steps,
                 "is_intermediate": False,
+                "intermediate_representation": "final",
             }
             for _ in final_images
         ]
@@ -303,11 +304,12 @@ def generate_images_internal(
     generate_kwargs = req.dict()
     capabilities = getattr(backend, "ed_info", {}).get("capabilities", {})
 
-    # Keep this request extension away from backends that do not advertise it.
-    # The field lives on the shared request model so old/non-classic backends
-    # would otherwise receive an unexpected kwarg even when the control is idle.
+    # Keep these request extensions away from backends that do not advertise
+    # Output After Step. The fields live on the shared request model, so older
+    # backends would otherwise receive unexpected kwargs even when idle.
     if not capabilities.get("output_after_step", False):
         generate_kwargs.pop("output_after_step", None)
+        generate_kwargs.pop("intermediate_representation", None)
 
     trajectory = getattr(task_data, "trajectory", None)
     if trajectory is not None and trajectory.enabled:

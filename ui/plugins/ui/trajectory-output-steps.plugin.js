@@ -5,6 +5,12 @@
         return
     }
 
+    const REPRESENTATION_LABELS = {
+        denoised: "Denoised estimate",
+        solver_state: "Solver state",
+        final: "Final",
+    }
+
     function install() {
         const inferenceStepsField = document.querySelector("#num_inference_steps")
         if (
@@ -63,6 +69,34 @@
             outputAfterStepField = outputAfterStepRow.querySelector("#output_after_step")
         }
 
+        let representationField = document.querySelector("#intermediate_representation")
+        let representationRow = representationField?.closest("tr")
+        if (!representationField) {
+            representationRow = document.createElement("tr")
+            representationRow.id = "intermediate_representation_row"
+            representationRow.className = "pl-5"
+            representationRow.innerHTML = `
+                <td>
+                    <label for="intermediate_representation">Intermediate View:</label>
+                </td>
+                <td>
+                    <select id="intermediate_representation" name="intermediate_representation">
+                        <option value="both" selected>Both</option>
+                        <option value="denoised">Denoised estimate</option>
+                        <option value="solver_state">Solver state</option>
+                    </select>
+                    <i class="fa-solid fa-circle-question help-btn">
+                        <span class="simple-tooltip top-left">
+                            Denoised estimate is the model's current predicted clean image. Solver state is
+                            the actual noisy latent being integrated. Both are sampled at the same completed-step boundary.
+                        </span>
+                    </i>
+                </td>
+            `
+            outputAfterStepRow.insertAdjacentElement("afterend", representationRow)
+            representationField = representationRow.querySelector("#intermediate_representation")
+        }
+
         const backendField = document.querySelector("#backend")
         const initImagePreviewContainer = document.querySelector("#init_image_preview_container")
         let linkedToInferenceSteps = true
@@ -101,6 +135,11 @@
             const available = mvpAvailable()
             outputAfterStepRow.style.display = available ? "" : "none"
             outputAfterStepField.disabled = !available
+
+            const hasIntermediates = available && clampedOutputStep() < totalSteps()
+            representationRow.style.display = hasIntermediates ? "" : "none"
+            representationField.disabled = !hasIntermediates
+
             if (!available) {
                 resetToFinal()
             }
@@ -110,6 +149,7 @@
             const total = totalSteps()
             if (linkedToInferenceSteps) {
                 outputAfterStepField.value = total
+                updateVisibility()
                 return
             }
             const current = clampedOutputStep()
@@ -117,12 +157,14 @@
             if (current === total) {
                 linkedToInferenceSteps = true
             }
+            updateVisibility()
         })
 
         outputAfterStepField.addEventListener("change", function () {
             const value = clampedOutputStep()
             outputAfterStepField.value = value
             linkedToInferenceSteps = value === totalSteps()
+            updateVisibility()
         })
 
         outputAfterStepField.addEventListener("blur", function () {
@@ -148,7 +190,7 @@
             attributeFilter: ["class"],
         })
 
-        // Add the value to the normal task summary when it is actually active.
+        // Add active values to the normal task summary.
         if (typeof taskConfigSetup !== "undefined" && taskConfigSetup.taskConfig) {
             taskConfigSetup.taskConfig.output_after_step = {
                 label: "Output After Step",
@@ -156,6 +198,18 @@
                     reqBody?.output_after_step !== undefined &&
                     reqBody?.output_after_step !== null &&
                     reqBody.output_after_step < reqBody.num_inference_steps,
+            }
+            taskConfigSetup.taskConfig.intermediate_representation = {
+                label: "Intermediate View",
+                visible: ({ reqBody }) =>
+                    reqBody?.output_after_step !== undefined &&
+                    reqBody?.output_after_step !== null &&
+                    reqBody.output_after_step < reqBody.num_inference_steps,
+                value: ({ reqBody }) => {
+                    const value = reqBody?.intermediate_representation || "both"
+                    if (value === "both") return "Both"
+                    return REPRESENTATION_LABELS[value] || value
+                },
             }
         }
 
@@ -166,6 +220,7 @@
                 const step = clampedOutputStep()
                 outputAfterStepField.value = step
                 task.reqBody.output_after_step = step
+                task.reqBody.intermediate_representation = representationField.value || "both"
             }
             return task
         }
@@ -176,12 +231,18 @@
                 const result = originalRestoreTaskToUI.apply(this, args)
                 const task = args[0]
                 const requested = task?.reqBody?.output_after_step
+                const representation = task?.reqBody?.intermediate_representation
                 if (requested !== undefined && requested !== null && mvpAvailable()) {
                     outputAfterStepField.value = Math.max(1, Math.min(parseInt(requested) || totalSteps(), totalSteps()))
                     linkedToInferenceSteps = parseInt(outputAfterStepField.value) === totalSteps()
+                    representationField.value = ["both", "denoised", "solver_state"].includes(representation)
+                        ? representation
+                        : "both"
                 } else {
                     resetToFinal()
+                    representationField.value = "both"
                 }
+                updateVisibility()
                 return result
             }
         }
@@ -226,9 +287,11 @@
 
                     const step = parseInt(entry.output_step)
                     const total = parseInt(entry.total_steps)
+                    const representation = entry.intermediate_representation || (entry.is_intermediate ? "solver_state" : "final")
                     image.setAttribute("data-steps", step)
                     image.setAttribute("data-output-step", step)
                     image.setAttribute("data-total-steps", total)
+                    image.setAttribute("data-intermediate-representation", representation)
 
                     const counter = image.getAttribute("data-imagecounter")
                     if (
@@ -239,6 +302,7 @@
                         imageRequest[counter].output_step = step
                         imageRequest[counter].total_steps = total
                         imageRequest[counter].is_intermediate = !!entry.is_intermediate
+                        imageRequest[counter].output_representation = representation
                     }
 
                     let stepLabel = item.querySelector(".imgStepLabel")
@@ -248,14 +312,38 @@
                         const seedLabel = item.querySelector(".imgSeedLabel")
                         seedLabel?.insertAdjacentElement("afterend", stepLabel)
                     }
-                    stepLabel.innerText = `Step ${step}/${total}`
+                    const repLabel = entry.is_intermediate ? REPRESENTATION_LABELS[representation] : null
+                    stepLabel.innerText = repLabel
+                        ? `Step ${step}/${total} · ${repLabel}`
+                        : `Step ${step}/${total}`
                 })
             }
 
             return result
         }
 
+        // Denoised and solver-state images from the same step would otherwise
+        // have identical Easy Diffusion filenames. Add a representation suffix
+        // to individual and ZIP downloads while leaving final-image names alone.
+        if (typeof getDownloadFilename === "function") {
+            const originalGetDownloadFilename = getDownloadFilename
+            getDownloadFilename = function (img, suffix) {
+                const name = originalGetDownloadFilename.call(this, img, suffix)
+                const representation = img?.dataset?.intermediateRepresentation
+                if (!representation || representation === "final") {
+                    return name
+                }
+                const marker = representation === "denoised" ? "denoised" : "solver-state"
+                const dot = name.lastIndexOf(".")
+                if (dot === -1) {
+                    return `${name}_${marker}`
+                }
+                return `${name.slice(0, dot)}_${marker}${name.slice(dot)}`
+            }
+        }
+
         resetToFinal()
+        representationField.value = "both"
         updateVisibility()
         // Settings are populated asynchronously during startup on some builds.
         window.setTimeout(updateVisibility, 250)

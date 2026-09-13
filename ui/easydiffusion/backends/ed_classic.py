@@ -25,6 +25,7 @@ ed_info = {
         "trajectory_capture": True,
         "trajectory_resume": False,
         "output_after_step": True,
+        "output_step_representations": True,
     },
 }
 
