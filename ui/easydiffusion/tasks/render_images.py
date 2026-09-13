@@ -5,6 +5,7 @@ import time
 from PIL import Image
 
 from easydiffusion import model_manager, runtime
+from easydiffusion.output_steps import flatten_output_step_results
 from easydiffusion.types import GenerateImageRequest, ModelsData, OutputFormatData, SaveToDiskData
 from easydiffusion.types import Image as ResponseImage
 from easydiffusion.types import GenerateImageResponse, RenderTaskData
@@ -131,10 +132,55 @@ def make_images(
         task,
     )
 
+    # The backend owns only transient CPU snapshots. It decodes them after the
+    # sampler returns, then hands the encoded intermediate images back through
+    # this context field for inclusion in the ordinary Easy Diffusion response.
+    output_step_results = getattr(context, "output_step_results", None) or []
+    context.output_step_results = []
+
+    intermediate_images = []
+    intermediate_metadata = []
+    for image, seed, metadata in flatten_output_step_results(
+        output_step_results,
+        req.seed,
+        req.num_inference_steps,
+    ):
+        intermediate_images.append(ResponseImage(data=image, seed=seed))
+        intermediate_metadata.append(metadata)
+
+    # Output After Step does not run expensive post-filters/upscalers over every
+    # observation in the MVP, but global NSFW policy still applies.
+    if task_data.block_nsfw and intermediate_images:
+        checked = filter_nsfw([image.data for image in intermediate_images])
+        for image, data in zip(intermediate_images, checked):
+            image.data = data
+
+    final_images = construct_response(images, seeds, output_format)
+    response_images = intermediate_images + final_images
+
     res = GenerateImageResponse(
-        req, task_data, models_data, output_format, save_data, images=construct_response(images, seeds, output_format)
+        req,
+        task_data,
+        models_data,
+        output_format,
+        save_data,
+        images=response_images,
     )
     res = res.json()
+
+    if intermediate_metadata:
+        final_metadata = [
+            {
+                "output_step": req.num_inference_steps,
+                "total_steps": req.num_inference_steps,
+                "is_intermediate": False,
+                "intermediate_representation": "final",
+            }
+            for _ in final_images
+        ]
+        for output, metadata in zip(res["output"], intermediate_metadata + final_metadata):
+            output.update(metadata)
+
     data_queue.put(json.dumps(res))
     log.info("Task completed")
 
@@ -149,12 +195,12 @@ def print_task_info(
     save_data: SaveToDiskData,
 ):
     req_str = pprint.pformat(get_printable_request(req, task_data, models_data, output_format, save_data)).replace(
-        "[", "\["
+        "[", "\\["
     )
-    task_str = pprint.pformat(task_data.dict()).replace("[", "\[")
-    models_data = pprint.pformat(models_data.dict()).replace("[", "\[")
-    output_format = pprint.pformat(output_format.dict()).replace("[", "\[")
-    save_data = pprint.pformat(save_data.dict()).replace("[", "\[")
+    task_str = pprint.pformat(task_data.dict()).replace("[", "\\[")
+    models_data = pprint.pformat(models_data.dict()).replace("[", "\\[")
+    output_format = pprint.pformat(output_format.dict()).replace("[", "\\[")
+    save_data = pprint.pformat(save_data.dict()).replace("[", "\\[")
 
     log.info(f"request: {req_str}")
     log.info(f"task data: {task_str}")
@@ -256,9 +302,17 @@ def generate_images_internal(
     )
 
     generate_kwargs = req.dict()
+    capabilities = getattr(backend, "ed_info", {}).get("capabilities", {})
+
+    # Keep these request extensions away from backends that do not advertise
+    # Output After Step. The fields live on the shared request model, so older
+    # backends would otherwise receive unexpected kwargs even when idle.
+    if not capabilities.get("output_after_step", False):
+        generate_kwargs.pop("output_after_step", None)
+        generate_kwargs.pop("intermediate_representation", None)
+
     trajectory = getattr(task_data, "trajectory", None)
     if trajectory is not None and trajectory.enabled:
-        capabilities = getattr(backend, "ed_info", {}).get("capabilities", {})
         if not capabilities.get("trajectory_capture", False):
             raise RuntimeError("The selected Easy Diffusion backend does not support trajectory capture")
         generate_kwargs["trajectory"] = trajectory.dict()

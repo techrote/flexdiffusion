@@ -1,5 +1,11 @@
 from sdkit import Context
 
+from easydiffusion.output_steps import (
+    FIXED_STEP_K_DIFFUSION_SAMPLERS,
+    OutputAfterStepCollector,
+    normalize_intermediate_representation,
+    normalize_output_after_step,
+)
 from easydiffusion.types import UserInitiatedStop
 from easydiffusion.utils import log
 
@@ -78,6 +84,112 @@ def set_options(context, **kwargs):
             opts[key] = kwargs[key]
 
 
+def _install_kdiff_callback_state_bridge():
+    """Temporarily expose k-diffusion's full callback state to Easy Diffusion.
+
+    sdkit 0.0.12's classic adapter currently reduces the k-diffusion callback
+    dictionary to ``callback(info["x"], info["i"])``. For Output After Step we
+    also need ``info["denoised"]``. Reproduce the tiny pinned adapter here while
+    this render is active, forwarding the original callback dictionary as a
+    third argument. The caller restores the original function immediately after
+    sampling, so ordinary classic renders retain upstream behaviour.
+    """
+    from sdkit.generate.sampler import k_samplers as sdkit_k_samplers
+
+    original_sample = sdkit_k_samplers.sample
+
+    def sample_with_callback_state(
+        context,
+        sampler_name=None,
+        noise=None,
+        batch_size=1,
+        shape=(),
+        steps=50,
+        cond=None,
+        uncond=None,
+        guidance_scale=0.8,
+        callback=None,
+        **kwargs,
+    ):
+        model = context.models["stable-diffusion"]
+        denoiser = (
+            sdkit_k_samplers.k_diffusion.external.CompVisVDenoiser
+            if model.parameterization == "v"
+            else sdkit_k_samplers.k_diffusion.external.CompVisDenoiser
+        )
+        wrapped_model = sdkit_k_samplers.DenoiserWrap(denoiser(model))
+        sigmas = wrapped_model.inner_model.get_sigmas(steps)
+
+        sample_fn = sdkit_k_samplers.samplers.get(sampler_name)
+        x_latent = noise
+        x_latent *= sigmas[0]
+
+        params = {
+            "model": wrapped_model,
+            "x": x_latent,
+            "callback": (
+                lambda info: callback(info["x"], info["i"], info)
+                if callback is not None
+                else None
+            ),
+            "extra_args": {
+                "uncond": uncond,
+                "cond": cond,
+                "guidance_scale": guidance_scale,
+            },
+        }
+
+        if sampler_name in ("dpm_fast", "dpm_adaptive"):
+            params["sigma_min"] = sigmas[-2]
+            params["sigma_max"] = sigmas[0]
+            if sampler_name == "dpm_fast":
+                params["n"] = steps - 1
+        else:
+            params["sigmas"] = sigmas
+
+        return sample_fn(**params)
+
+    sdkit_k_samplers.sample = sample_with_callback_state
+
+    def restore():
+        if sdkit_k_samplers.sample is sample_with_callback_state:
+            sdkit_k_samplers.sample = original_sample
+
+    return restore
+
+
+def _decode_output_step_snapshots(context, collector):
+    """Decode owned CPU snapshots sequentially after denoising has finished."""
+    output_format = opts.get("output_format", "jpeg")
+    output_quality = opts.get("output_quality", 75)
+    output_lossless = opts.get("output_lossless", False)
+    results = []
+
+    gc(context)
+    for completed_step, representation, cpu_samples in collector.pop_snapshots():
+        device_samples = None
+        try:
+            device_samples = cpu_samples.to(context.torch_device)
+            images = latent_samples_to_images(context, device_samples)
+            encoded = [
+                img_to_base64_str(img, output_format, output_quality, output_lossless)
+                for img in images
+            ]
+            results.append(
+                {
+                    "step": completed_step,
+                    "representation": representation,
+                    "images": encoded,
+                }
+            )
+        finally:
+            if device_samples is not None:
+                del device_samples
+            gc(context)
+
+    return results
+
+
 def generate_images(
     context: Context,
     callback=None,
@@ -93,6 +205,16 @@ def generate_images(
 
     trajectory_recorder = None
     trajectory_status = "failed"
+    output_step_collector = None
+
+    # This context is reused between jobs. Always clear prior transient outputs.
+    context.output_step_results = []
+    output_after_step = req.pop("output_after_step", None)
+    intermediate_representation = req.pop("intermediate_representation", "both")
+
+    total_steps = req["num_inference_steps"]
+    if req.get("init_image") is not None:
+        total_steps = int(req["num_inference_steps"] * req.get("prompt_strength", 0.8))
 
     # The classic backend forces img2img through DDIM. Apply that rule before
     # trajectory metadata is frozen so manifests record the effective sampler,
@@ -100,15 +222,30 @@ def generate_images(
     if req["init_image"] is not None and not context.test_diffusers:
         req["sampler_name"] = "ddim"
 
+    output_after_step = normalize_output_after_step(output_after_step, total_steps)
+    intermediate_representation = normalize_intermediate_representation(intermediate_representation)
+    if output_after_step < total_steps:
+        if context.test_diffusers:
+            raise RuntimeError("Output After Step currently supports only the classic Easy Diffusion backend")
+        if req.get("init_image") is not None:
+            raise RuntimeError("Output After Step currently supports txt2img only")
+        if req.get("sampler_name") not in FIXED_STEP_K_DIFFUSION_SAMPLERS:
+            supported = ", ".join(sorted(FIXED_STEP_K_DIFFUSION_SAMPLERS))
+            raise RuntimeError(
+                f'Output After Step is not yet supported for sampler {req.get("sampler_name")!r}. '
+                f"Supported classic fixed-step k-diffusion samplers: {supported}"
+            )
+        output_step_collector = OutputAfterStepCollector(
+            output_after_step,
+            total_steps,
+            representation=intermediate_representation,
+        )
+
     if trajectory and trajectory.get("enabled", False):
         from easydiffusion.trajectory import TrajectoryRecorder
 
         if context.test_diffusers:
             raise RuntimeError("Trajectory capture is currently supported only by the classic sdkit path")
-
-        total_steps = req["num_inference_steps"]
-        if req.get("init_image") is not None:
-            total_steps = int(req["num_inference_steps"] * req.get("prompt_strength", 0.8))
 
         model_paths = getattr(context, "model_paths", {}) or {}
         run_metadata = {
@@ -128,6 +265,7 @@ def generate_images(
         trajectory_recorder = TrajectoryRecorder(trajectory, total_steps, run_metadata=run_metadata)
 
     images = []
+    restore_kdiff_bridge = None
     try:
         gc(context)
         context.stop_processing = False
@@ -136,9 +274,33 @@ def generate_images(
             controlnet_filter = convert_ED_controlnet_filter_name(controlnet_filter)
             req["control_image"] = filter_images(context, req["control_image"], controlnet_filter)[0]
 
-        callback = make_step_callback(context, callback, trajectory_recorder=trajectory_recorder)
-        images = generate_images(context, callback=callback, **req)
+        callback = make_step_callback(
+            context,
+            callback,
+            trajectory_recorder=trajectory_recorder,
+            output_step_collector=output_step_collector,
+        )
+
+        if output_step_collector is not None:
+            restore_kdiff_bridge = _install_kdiff_callback_state_bridge()
+        try:
+            images = generate_images(context, callback=callback, **req)
+        finally:
+            if restore_kdiff_bridge is not None:
+                restore_kdiff_bridge()
+                restore_kdiff_bridge = None
+
         trajectory_status = "complete"
+
+        # Do not interrupt the denoising loop with VAE work. Intermediate
+        # snapshots are tiny SD1.x latents copied to CPU in the callback and
+        # decoded here, one at a time, after the sampler has returned normally.
+        if output_step_collector is not None:
+            try:
+                context.output_step_results = _decode_output_step_snapshots(context, output_step_collector)
+            except Exception as error:
+                context.output_step_results = []
+                log.error(f"Output After Step decode failed: {type(error).__name__}: {error}")
     except UserInitiatedStop:
         trajectory_status = "interrupted"
         partial_x_samples = getattr(context, "partial_x_samples", None)
@@ -149,6 +311,9 @@ def generate_images(
             else:
                 images = latent_samples_to_images(context, partial_x_samples)
     finally:
+        if restore_kdiff_bridge is not None:
+            restore_kdiff_bridge()
+
         partial_x_samples = getattr(context, "partial_x_samples", None)
         if partial_x_samples is not None:
             if not context.test_diffusers:
@@ -255,8 +420,9 @@ def list_controlnet_filters():
     return cn_filters
 
 
-def make_step_callback(context, callback, trajectory_recorder=None):
+def make_step_callback(context, callback, trajectory_recorder=None, output_step_collector=None):
     capture_failed = False
+    output_step_capture_failed = False
 
     def decode_current_latent():
         if context.test_diffusers:
@@ -272,6 +438,11 @@ def make_step_callback(context, callback, trajectory_recorder=None):
                 trajectory_recorder.note_error(f"checkpoint callback {i}: {type(error).__name__}: {error}")
             except Exception as manifest_error:
                 log.error(f"Trajectory recorder could not persist its error state: {manifest_error}")
+
+    def note_output_step_failure(i, error):
+        nonlocal output_step_capture_failed
+        output_step_capture_failed = True
+        log.error(f"Output After Step capture failed at callback step {i}: {type(error).__name__}: {error}")
 
     def on_step(x_samples, i, *args):
         stream_image_progress = opts.get("stream_image_progress", False)
@@ -293,6 +464,26 @@ def make_step_callback(context, callback, trajectory_recorder=None):
             and trajectory_recorder.wants_callback_index(i)
         )
         trajectory_preview_requested = trajectory_requested and trajectory_recorder.wants_preview
+
+        # k-diffusion invokes this callback before integration update i. The x
+        # observed at callback index N is therefore the state after N completed
+        # updates. The callback dictionary also contains the model's current
+        # clean estimate under `denoised`.
+        output_step_requested = (
+            output_step_collector is not None
+            and not output_step_capture_failed
+            and output_step_collector.wants_callback_index(i)
+        )
+        if output_step_requested:
+            try:
+                callback_state = args[0] if args and isinstance(args[0], dict) else {}
+                output_step_collector.capture_step(
+                    i,
+                    x_samples,
+                    denoised=callback_state.get("denoised"),
+                )
+            except Exception as error:
+                note_output_step_failure(i, error)
 
         live_images = None
         trajectory_images = None

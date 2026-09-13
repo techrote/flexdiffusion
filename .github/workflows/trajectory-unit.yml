@@ -26,7 +26,13 @@ jobs:
           ui/easydiffusion/trajectory.py
           ui/easydiffusion/trajectory_artifacts.py
           ui/easydiffusion/trajectory_types.py
+          ui/easydiffusion/output_steps.py
+          ui/easydiffusion/types.py
+          ui/easydiffusion/backends/sdkit_common.py
+          ui/easydiffusion/tasks/render_images.py
           scripts/trajectory_smoke.py
+      - name: Check Output After Step UI plugin syntax
+        run: node --check ui/plugins/ui/trajectory-output-steps.plugin.js
       - name: Parse Windows development setup helper
         shell: pwsh
         run: |
