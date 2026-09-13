@@ -24,6 +24,7 @@ ed_info = {
     "capabilities": {
         "trajectory_capture": True,
         "trajectory_resume": False,
+        "output_after_step": True,
     },
 }
 
