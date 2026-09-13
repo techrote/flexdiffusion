@@ -2,13 +2,15 @@
 
 ## Current branch state
 
-The SD1.x/classic trajectory work is split into three stacked changes:
+The SD1.x/classic trajectory work now has a usable experimental UI layer on top of the capture plumbing:
 
 1. bootstrap capture plumbing (`trajectory-capture-bootstrap`);
 2. persisted checkpoint artefacts (`trajectory-artifacts`);
-3. first user-facing trajectory probe (`trajectory-output-steps-mvp`).
+3. `Output After Step` with denoised/solver-state views;
+4. fixed-seed multi-sampler comparison;
+5. timestamp-paired review capture export.
 
-The bootstrap and artefact branches have passing lightweight CI. The artefact branch still needs its complete fixed-seed GPU gate before exact-resume work should be treated as justified. `trajectory-output-steps-mvp` is the deliberately narrow visual probe stacked on top.
+The bootstrap and artefact branches have passing lightweight CI. The artefact branch still needs its complete fixed-seed GPU gate before exact-resume work should be treated as justified.
 
 ## Implemented
 
@@ -35,15 +37,22 @@ The bootstrap and artefact branches have passing lightweight CI. The artefact br
 - explicit per-image completed-step metadata;
 - selectable intermediate representation: `denoised`, `solver_state`, or `both`;
 - temporary callback bridge that preserves k-diffusion's original `denoised` callback value without changing sampler equations;
-- representation-specific output labels and download filenames.
+- representation-specific output labels and download filenames;
+- fixed explicit seed as the normal comparison default;
+- multi-sampler `Also run` UI that enqueues each selected sampler as a separate ordinary task with the same seed/settings;
+- review-capture export that writes timestamp-matched PNG and editable Markdown metadata files for all visible experiment tasks;
+- machine-readable raw JSON embedded in each review sidecar, with SHA-256/length descriptors for large embedded values;
+- DOM screenshot capture with a deterministic canvas review-sheet fallback.
 
 ## Observed hardware behaviour
 
 The first GTX 1650 Super run of the raw solver-state MVP succeeded and produced the expected progression: Step 20/30 looked like a recognisable but noisy/unfinished form of the Step 30 result, with noise progressively removed across later solver states.
 
-That observation clarified an important product distinction. Raw solver state `x` is the state needed for future continuation/branching research, but it is not the best human-facing trajectory preview. k-diffusion's `denoised` value is the model's current clean-image estimate at the same callback boundary, so the MVP now exposes both representations.
+That observation clarified an important product distinction. Raw solver state `x` is the state needed for future continuation/branching research, but it is not the best human-facing trajectory preview. k-diffusion's `denoised` value is the model's current clean-image estimate at the same callback boundary, so the UI exposes both representations.
 
-The dual-representation bridge still needs its first real-GPU visual check.
+The user is running the 4 GB GTX 1650 Super in low-VRAM mode to avoid overspill into system RAM. Wall-clock sampler timings on this machine therefore include backend memory-management effects as well as sampler arithmetic; they remain useful for this exact hardware configuration but should not be treated as sampler-intrinsic benchmarks.
+
+Heun has already shown a useful aesthetic difference for the fixed cyberdino seed by avoiding an otherwise recurring floating-light artifact. Sampler diversity is therefore being treated as an experimental axis rather than a compatibility problem.
 
 ## Important semantic boundary
 
@@ -62,6 +71,7 @@ Normal generation still follows the upstream call path when `trajectory.enabled`
 - complete persisted-artefact GPU validation on GTX 1650 Super and Quadro RTX 4000;
 - measured dense-capture VRAM/RAM/disk/timing overhead;
 - GPU validation that dual-representation Output After Step leaves the ordinary final image unchanged;
+- real-browser validation of Review Capture's preferred DOM screenshot path and matching dual-file download on the GTX 1650 Super setup;
 - sampler sigma/timestep and multistep solver-state persistence in the trajectory manifest;
 - exact/approximate resume classification;
 - branch DAG persistence and lineage operations;
@@ -73,7 +83,9 @@ Normal generation still follows the upstream call path when `trajectory.enabled`
 
 ## Next gates
 
-For the lightweight Output After Step prototype, run the SD1.4 `cyberpunk dinosaur mercenary` reference case in `OUTPUT_AFTER_STEP_MVP.md` with **Intermediate View = Both** and verify that:
+For the lightweight trajectory UI, continue fixed-seed SD1.4 sampler comparisons and use **Review capture** after each intentionally grouped test set. A valid review export should produce a same-basename `.png` and `.md`, include every visible task/request and output-step representation, and leave generation state untouched.
+
+For the Output After Step prototype, use the SD1.4 `cyberpunk dinosaur mercenary` reference case in `OUTPUT_AFTER_STEP_MVP.md` with **Intermediate View = Both** and verify that:
 
 1. each requested completed step emits a denoised estimate followed by its solver state;
 2. the denoised estimate is visually clean enough to serve as the human-facing trajectory representation;
