@@ -140,6 +140,14 @@
             })
         }
 
+        // getAppConfig() updates body classes after applying the backend config
+        // without firing a change event on the backend select. Observe that
+        // transition so the row reliably appears after an ed_classic restart.
+        new MutationObserver(updateVisibility).observe(document.body, {
+            attributes: true,
+            attributeFilter: ["class"],
+        })
+
         // Add the value to the normal task summary when it is actually active.
         if (typeof taskConfigSetup !== "undefined" && taskConfigSetup.taskConfig) {
             taskConfigSetup.taskConfig.output_after_step = {
