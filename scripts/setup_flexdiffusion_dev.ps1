@@ -3,12 +3,24 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$EasyDiffusionPath,
 
-    [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
+    [string]$RepoPath,
 
     [switch]$Restore
 )
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell can leave $PSScriptRoot empty while evaluating parameter
+# default expressions. Resolve the repository path only after parameter binding,
+# using the script invocation path, so callers may safely omit -RepoPath.
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    $scriptPath = $MyInvocation.MyCommand.Path
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        throw "Could not determine this setup script's path. Pass -RepoPath explicitly."
+    }
+    $scriptDir = Split-Path -Parent $scriptPath
+    $RepoPath = Split-Path -Parent $scriptDir
+}
 
 function Resolve-ExistingPath([string]$Path, [string]$Label) {
     if (-not (Test-Path -LiteralPath $Path)) {
