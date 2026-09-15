@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - trajectory-lab
+      - trajectory-artifacts
   push:
     branches:
       - trajectory-lab
@@ -20,5 +21,137 @@ jobs:
           python-version: "3.10"
       - name: Install minimal test dependency
         run: python -m pip install "pydantic<2"
+      - name: Compile trajectory Python helpers
+        run: >-
+          python -m py_compile
+          ui/easydiffusion/trajectory.py
+          ui/easydiffusion/trajectory_artifacts.py
+          ui/easydiffusion/trajectory_types.py
+          ui/easydiffusion/output_steps.py
+          ui/easydiffusion/types.py
+          ui/easydiffusion/backends/sdkit_common.py
+          ui/easydiffusion/tasks/render_images.py
+          scripts/trajectory_smoke.py
+      - name: Check Trajectory Lab UI plugin syntax
+        run: |
+          node --check ui/plugins/ui/trajectory-output-steps.plugin.js
+          node --check ui/plugins/ui/sampler-comparison.plugin.js
+          node --check ui/plugins/ui/benchmark-run.plugin.js
+          node --check ui/plugins/ui/review-capture.plugin.js
+      - name: Check sparse capture helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/trajectory-output-steps.plugin.js')
+          const helper = globalThis.__flexDiffusionSparseCaptureTest
+          const steps = helper.parseCaptureExpression('10, 16, 20-24', 30)
+          assert.deepStrictEqual(steps, [10, 16, 20, 21, 22, 23, 24])
+          assert.strictEqual(helper.formatCaptureSteps(steps), '10, 16, 20-24')
+          assert.deepStrictEqual(helper.endpointSolverSteps(steps, 30, true), [10, 24])
+          assert.strictEqual(
+            helper.encodeSparseTransport(steps, 30, true),
+            'sparse:10,16,20-24|endpoints=1'
+          )
+          assert.deepStrictEqual(helper.outputCountSummary(steps, 30, true), {
+            denoisedCount: 7,
+            solverCount: 2,
+            finalCount: 1,
+            totalOutputs: 10,
+          })
+          assert.deepStrictEqual(helper.endpointSolverSteps([16, 20], 20, true), [16])
+          assert.throws(() => helper.parseCaptureExpression('24-20', 30))
+          assert.throws(() => helper.parseCaptureExpression('31', 30))
+          NODE
+      - name: Check sampler comparison helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/sampler-comparison.plugin.js')
+          const helper = globalThis.__flexDiffusionSamplerComparisonTest.orderedUniqueSamplerNames
+          assert.deepStrictEqual(helper('heun', ['dpmpp_2m', 'heun', 'euler']), ['heun', 'dpmpp_2m', 'euler'])
+          assert.deepStrictEqual(helper('dpmpp_2m', []), ['dpmpp_2m'])
+          assert.deepStrictEqual(helper('', ['heun', 'heun']), ['heun'])
+          NODE
+      - name: Check benchmark run helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/trajectory-output-steps.plugin.js')
+          require('./ui/plugins/ui/benchmark-run.plugin.js')
+          const helper = globalThis.__flexDiffusionBenchmarkRunTest
+          const sparse = globalThis.__flexDiffusionSparseCaptureTest
+          assert.strictEqual(helper.schema, 'flexdiffusion-benchmark/v1')
+          const normalized = helper.normalizeBenchmarkConfig(helper.builtInExample)
+          assert.strictEqual(normalized.name, 'Cyberdino sparse sampler baseline')
+          assert.strictEqual(normalized.cases.length, 1)
+          assert.strictEqual(normalized.cases[0].samplers.length, 9)
+          assert.strictEqual(normalized.cases[0].settings.capture_iterations, '10, 16, 18-20')
+          assert.deepStrictEqual(helper.benchmarkSummary(helper.builtInExample, sparse), {
+            cases: 1,
+            tasks: 9,
+            outputs: 45,
+          })
+          const twoCase = JSON.parse(JSON.stringify(helper.builtInExample))
+          twoCase.cases.push({
+            id: 'seed-3',
+            label: 'Seed 3',
+            settings: { seed: 3 },
+            samplers: ['heun', 'euler'],
+          })
+          const expanded = helper.normalizeBenchmarkConfig(twoCase)
+          assert.strictEqual(expanded.cases[1].settings.seed, 3)
+          assert.deepStrictEqual(expanded.cases[1].samplers, ['heun', 'euler'])
+          const bad = JSON.parse(JSON.stringify(helper.builtInExample))
+          bad.defaults.typo_setting = 1
+          assert.throws(() => helper.normalizeBenchmarkConfig(bad), /unknown setting/)
+          NODE
+      - name: Check review capture helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/review-capture.plugin.js')
+          const helper = globalThis.__flexDiffusionReviewCaptureTest
+          const stamp = helper.makeTimestamp(new Date(2026, 8, 13, 17, 33, 4))
+          assert.strictEqual(stamp, '2026-09-13_17-33-04')
+          const markdown = helper.buildReviewMarkdown(
+            {
+              capture: { local_time: '2026-09-13 17:33:04' },
+              app: { backend: 'ed_classic' },
+              ui_state: { seed: '2', primary_sampler: 'heun', additional_samplers: ['dpmpp_2m'] },
+              tasks: [
+                {
+                  request: {
+                    prompt: 'cyberpunk dinosaur mercenary',
+                    seed: 2,
+                    sampler_name: 'heun',
+                    width: 512,
+                    height: 512,
+                    num_inference_steps: 20,
+                  },
+                  outputs: [],
+                },
+              ],
+            },
+            `${stamp}.png`
+          )
+          assert(markdown.includes('Rating (0-10)'))
+          assert(markdown.includes('Sampler: heun'))
+          assert(markdown.includes('```json'))
+          assert(markdown.includes(`${stamp}.png`))
+          NODE
+      - name: Parse Windows development setup helper
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/setup_flexdiffusion_dev.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
       - name: Run trajectory unit tests
-        run: python -m unittest discover -s tests -p "test_trajectory.py" -v
+        run: python -m unittest discover -s tests -p "test_trajectory*.py" -v

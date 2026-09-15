@@ -1,10 +1,8 @@
 """Trajectory capture primitives for FlexDiffusion.
 
-This module is deliberately dependency-light.  Schedule parsing and manifest
-management must be testable without importing torch or starting an Easy
-Diffusion backend.  Actual latent/preview persistence is added in the next
-stage; the recorder introduced here establishes stable run/checkpoint metadata
-and the callback interception contract.
+Schedule parsing and manifest management remain dependency-light. Heavy tensor
+serialization is delegated lazily to ``trajectory_artifacts`` only when an
+opt-in capture actually requests persisted artefacts.
 """
 
 from __future__ import annotations
@@ -14,12 +12,13 @@ import math
 import os
 import re
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 
-TRAJECTORY_FORMAT_VERSION = 1
+TRAJECTORY_FORMAT_VERSION = 2
 _VALID_PERSISTENCE_MODES = {"preview", "latent", "hybrid"}
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _RANGE_RE = re.compile(r"^(\d+)\s*-\s*(\d+)(?:\s*:\s*(\d+))?$")
@@ -40,12 +39,12 @@ def compile_capture_schedule(spec: str, total_steps: int) -> Tuple[int, ...]:
     * inclusive ranges: ``1-10`` or ``1-10:2``
     * percentages: ``10%,25%,50%,100%``
 
-    User-facing steps are intentionally one-based.  Easy Diffusion/sdkit
+    User-facing steps are intentionally one-based. Easy Diffusion/sdkit
     callbacks are currently zero-based, so :class:`TrajectoryRecorder` maps
     callback index ``i`` to displayed step ``i + 1`` before matching.
 
     Percentage checkpoints use ``ceil(total_steps * percentage / 100)`` so a
-    positive percentage never resolves to a non-existent step zero.  ``100%``
+    positive percentage never resolves to a non-existent step zero. ``100%``
     always resolves to ``total_steps``.
     """
 
@@ -95,9 +94,7 @@ def compile_capture_schedule(spec: str, total_steps: int) -> Tuple[int, ...]:
         if _INTEGER_RE.match(token):
             step = int(token)
             if step < 1 or step > total_steps:
-                raise CaptureScheduleError(
-                    f"capture step {step} is outside 1..{total_steps}"
-                )
+                raise CaptureScheduleError(f"capture step {step} is outside 1..{total_steps}")
             steps.add(step)
             continue
 
@@ -180,11 +177,12 @@ def _atomic_write_json(path: str, payload: Mapping[str, Any]) -> None:
 
 
 class TrajectoryRecorder:
-    """Incremental manifest recorder for one diffusion trajectory.
+    """Incremental recorder for one diffusion trajectory.
 
-    The current implementation intentionally records metadata only.  It is the
-    stable scaffold onto which bounded asynchronous latent/preview persistence
-    will be attached.  No live tensor references are retained.
+    Selected live CUDA tensors are detached and copied to CPU synchronously at
+    the sampler callback boundary. Disk I/O then runs through a bounded worker
+    queue. This prevents an unbounded chain of GPU tensors while also ensuring
+    requested checkpoints are never silently dropped.
     """
 
     def __init__(
@@ -198,12 +196,16 @@ class TrajectoryRecorder:
         self.total_steps = total_steps
         self.run_id = str(uuid.uuid4())
         self._recorded_steps = set()
+        self._checkpoint_by_id: Dict[str, Dict[str, Any]] = {}
         self._closed = False
         self._error_messages = []
+        self._lock = threading.RLock()
+        self._artifact_writer = None
         self.capture_steps: Tuple[int, ...] = ()
         self.run_dir: Optional[str] = None
         self.manifest_path: Optional[str] = None
         self.manifest: Dict[str, Any] = {}
+        self.persistence_mode = "preview"
 
         if not self.enabled:
             return
@@ -214,6 +216,7 @@ class TrajectoryRecorder:
                 f"unsupported trajectory persistence mode {mode!r}; "
                 f"expected one of {sorted(_VALID_PERSISTENCE_MODES)}"
             )
+        self.persistence_mode = mode
         self.config["persistence_mode"] = mode
 
         self.capture_steps = compile_capture_schedule(
@@ -231,9 +234,7 @@ class TrajectoryRecorder:
                     f"exceeding max_checkpoints={max_checkpoints}"
                 )
 
-        output_root = self.config.get("output_root") or os.path.join(
-            os.getcwd(), "outputs", "trajectories"
-        )
+        output_root = self.config.get("output_root") or os.path.join(os.getcwd(), "outputs", "trajectories")
         project_name = _safe_name(self.config.get("project_name"), "trajectory")
         run_slug = f"{project_name}-{self.run_id[:8]}"
         self.run_dir = os.path.abspath(os.path.join(str(output_root), run_slug))
@@ -252,14 +253,55 @@ class TrajectoryRecorder:
             "config": _json_safe(self.config),
             "run_metadata": _json_safe(dict(run_metadata or {})),
             "checkpoints": [],
+            "artifact_bytes": 0,
             "errors": [],
         }
         self._flush_manifest()
 
+        if self.capture_steps:
+            from easydiffusion.trajectory_artifacts import ArtifactWriter
+
+            try:
+                self._artifact_writer = ArtifactWriter(
+                    run_dir=self.run_dir,
+                    preview_format=self.config.get("preview_format", "jpeg"),
+                    preview_quality=int(self.config.get("preview_quality", 75)),
+                    queue_size=int(self.config.get("writer_queue_size", 2)),
+                    storage_budget_mb=self.config.get("storage_budget_mb"),
+                    on_result=self._on_artifact_result,
+                )
+            except Exception as exc:
+                # The initial manifest already exists at this point. Finalise it
+                # explicitly so a configuration/initialisation failure never
+                # leaves a misleading forever-"recording" run behind.
+                with self._lock:
+                    message = f"artifact writer initialisation failed: {type(exc).__name__}: {exc}"
+                    self._error_messages.append(message)
+                    self.manifest["status"] = "initialisation_failed"
+                    self.manifest["errors"] = list(self._error_messages)
+                    self.manifest["updated_at"] = _utc_now()
+                    self.manifest["completed_at"] = _utc_now()
+                    self._closed = True
+                    self._flush_manifest_locked()
+                raise
+
+    @property
+    def wants_latent(self) -> bool:
+        return self.persistence_mode in ("latent", "hybrid")
+
+    @property
+    def wants_preview(self) -> bool:
+        return self.persistence_mode in ("preview", "hybrid")
+
     def wants_callback_index(self, callback_index: int) -> bool:
         if not self.enabled or self._closed:
             return False
-        return callback_index + 1 in self.capture_steps
+        display_step = callback_index + 1
+        with self._lock:
+            return display_step in self.capture_steps and display_step not in self._recorded_steps
+
+    def needs_preview_at(self, callback_index: int) -> bool:
+        return self.wants_preview and self.wants_callback_index(callback_index)
 
     def record_step(
         self,
@@ -267,61 +309,172 @@ class TrajectoryRecorder:
         x_samples: Any,
         step_metadata: Optional[Mapping[str, Any]] = None,
     ) -> bool:
-        """Record one requested checkpoint.
+        """Record checkpoint metadata only.
 
-        Returns ``True`` if a new checkpoint was recorded.  The recorder stores
-        only tensor metadata in this scaffold and never retains ``x_samples``.
+        This compatibility/testing helper deliberately performs no artefact I/O.
+        Production callback capture should use :meth:`capture_step`.
         """
 
         if not self.wants_callback_index(callback_index):
             return False
+        checkpoint = self._append_checkpoint(
+            callback_index,
+            x_samples,
+            step_metadata=step_metadata,
+            artifact_status="metadata_only",
+        )
+        return checkpoint is not None
 
-        display_step = callback_index + 1
-        if display_step in self._recorded_steps:
+    def capture_step(
+        self,
+        callback_index: int,
+        x_samples: Any,
+        preview_images: Optional[Any] = None,
+        step_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> bool:
+        """Snapshot and queue one requested checkpoint for persistence."""
+
+        if not self.wants_callback_index(callback_index):
             return False
 
-        checkpoint = {
-            "checkpoint_id": str(uuid.uuid4()),
-            "callback_index": int(callback_index),
-            "step": display_step,
-            "total_steps": self.total_steps,
-            "captured_at": _utc_now(),
-            "tensor": _tensor_metadata(x_samples),
-            "latent": None,
-            "preview": None,
-            "resume_fidelity": "UNCLASSIFIED",
-            "metadata": _json_safe(dict(step_metadata or {})),
-        }
-        self.manifest["checkpoints"].append(checkpoint)
-        self._recorded_steps.add(display_step)
-        self.manifest["updated_at"] = _utc_now()
-        self._flush_manifest()
+        latent_snapshot = None
+        preview_snapshots = []
+
+        if self.wants_latent:
+            from easydiffusion.trajectory_artifacts import snapshot_tensor_to_cpu
+
+            latent_snapshot = snapshot_tensor_to_cpu(x_samples)
+
+        if self.wants_preview:
+            if preview_images is None:
+                raise ValueError("trajectory preview persistence requested but no decoded preview was supplied")
+            preview_snapshots = [image.copy() for image in preview_images]
+
+        checkpoint = self._append_checkpoint(
+            callback_index,
+            x_samples,
+            step_metadata=step_metadata,
+            artifact_status="queued",
+        )
+        if checkpoint is None:
+            return False
+
+        if self._artifact_writer is None:
+            raise RuntimeError("trajectory artifact writer is unavailable")
+
+        try:
+            self._artifact_writer.submit(
+                checkpoint["checkpoint_id"],
+                checkpoint["step"],
+                latent=latent_snapshot,
+                previews=preview_snapshots,
+            )
+        except Exception as exc:
+            self._on_artifact_result(
+                checkpoint["checkpoint_id"],
+                {},
+                f"{type(exc).__name__}: {exc}",
+            )
+            raise
         return True
 
     def note_error(self, message: str) -> None:
         if not self.enabled:
             return
-        message = str(message)
-        self._error_messages.append(message)
-        self.manifest["errors"] = list(self._error_messages)
-        self.manifest["updated_at"] = _utc_now()
-        self._flush_manifest()
+        with self._lock:
+            self._error_messages.append(str(message))
+            self.manifest["errors"] = list(self._error_messages)
+            self.manifest["updated_at"] = _utc_now()
+            self._flush_manifest_locked()
 
     def finish(self, status: str = "complete", error: Optional[str] = None) -> None:
         if not self.enabled or self._closed:
             return
-        if error:
-            self._error_messages.append(str(error))
-        if self._error_messages and status == "complete":
-            status = "complete_with_capture_errors"
-        self.manifest["status"] = status
-        self.manifest["errors"] = list(self._error_messages)
-        self.manifest["updated_at"] = _utc_now()
-        self.manifest["completed_at"] = _utc_now()
-        self._flush_manifest()
-        self._closed = True
+
+        if self._artifact_writer is not None:
+            try:
+                self._artifact_writer.close()
+            except Exception as exc:
+                self.note_error(f"artifact writer close failed: {type(exc).__name__}: {exc}")
+
+        with self._lock:
+            if error:
+                self._error_messages.append(str(error))
+            if self._error_messages and status == "complete":
+                status = "complete_with_capture_errors"
+            self.manifest["status"] = status
+            self.manifest["errors"] = list(self._error_messages)
+            self.manifest["updated_at"] = _utc_now()
+            self.manifest["completed_at"] = _utc_now()
+            self._flush_manifest_locked()
+            self._closed = True
+
+    def _append_checkpoint(
+        self,
+        callback_index: int,
+        x_samples: Any,
+        step_metadata: Optional[Mapping[str, Any]],
+        artifact_status: str,
+    ) -> Optional[Dict[str, Any]]:
+        display_step = callback_index + 1
+        with self._lock:
+            if display_step in self._recorded_steps:
+                return None
+            checkpoint = {
+                "checkpoint_id": str(uuid.uuid4()),
+                "callback_index": int(callback_index),
+                "step": display_step,
+                "total_steps": self.total_steps,
+                "captured_at": _utc_now(),
+                "tensor": _tensor_metadata(x_samples),
+                "artifact_status": artifact_status,
+                "latent": None,
+                "previews": [],
+                "artifact_bytes": 0,
+                "resume_fidelity": "UNCLASSIFIED",
+                "metadata": _json_safe(dict(step_metadata or {})),
+            }
+            self.manifest["checkpoints"].append(checkpoint)
+            self._checkpoint_by_id[checkpoint["checkpoint_id"]] = checkpoint
+            self._recorded_steps.add(display_step)
+            self.manifest["updated_at"] = _utc_now()
+            self._flush_manifest_locked()
+            return checkpoint
+
+    def _on_artifact_result(
+        self,
+        checkpoint_id: str,
+        result: Dict[str, Any],
+        error: Optional[str],
+    ) -> None:
+        with self._lock:
+            checkpoint = self._checkpoint_by_id.get(checkpoint_id)
+            if checkpoint is None:
+                raise KeyError(f"unknown trajectory checkpoint id: {checkpoint_id}")
+
+            if error:
+                checkpoint["artifact_status"] = "error"
+                checkpoint["artifact_error"] = error
+                message = f"checkpoint step {checkpoint['step']} artifact persistence failed: {error}"
+                self._error_messages.append(message)
+                self.manifest["errors"] = list(self._error_messages)
+            else:
+                checkpoint["artifact_status"] = "persisted"
+                checkpoint["latent"] = result.get("latent")
+                checkpoint["previews"] = result.get("previews", [])
+                checkpoint["artifact_bytes"] = int(result.get("bytes", 0))
+                self.manifest["artifact_bytes"] = int(self.manifest.get("artifact_bytes", 0)) + checkpoint[
+                    "artifact_bytes"
+                ]
+
+            self.manifest["updated_at"] = _utc_now()
+            self._flush_manifest_locked()
 
     def _flush_manifest(self) -> None:
+        with self._lock:
+            self._flush_manifest_locked()
+
+    def _flush_manifest_locked(self) -> None:
         if self.manifest_path is None:
             return
         _atomic_write_json(self.manifest_path, self.manifest)
