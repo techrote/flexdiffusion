@@ -22,6 +22,10 @@
         "clip_skip",
         "vae_model",
         "scheduler",
+        "vram_usage_level",
+        "stream_image_progress",
+        "block_nsfw",
+        "show_only_filtered_image",
     ])
 
     const BUILT_IN_EXAMPLE = {
@@ -40,12 +44,17 @@
             inference_steps: 20,
             guidance_scale: 7.5,
             output_format: "png",
+            output_quality: 75,
             capture_iterations: "10, 16, 18-20",
             endpoint_solver_states: false,
             num_outputs: 1,
             num_outputs_parallel: 1,
             clip_skip: false,
             vae_model: "",
+            vram_usage_level: "low",
+            stream_image_progress: false,
+            block_nsfw: false,
+            show_only_filtered_image: false,
         },
         samplers: [
             "dpmpp_2m",
@@ -58,12 +67,7 @@
             "dpmpp_2s_a",
             "dpmpp_sde",
         ],
-        cases: [
-            {
-                id: "baseline",
-                label: "SD1.4 seed 2 sparse sampler sweep",
-            },
-        ],
+        cases: [{ id: "baseline", label: "SD1.4 seed 2 sparse sampler sweep" }],
     }
 
     function isPlainObject(value) {
@@ -83,8 +87,7 @@
 
     function integer(value, label, min, max) {
         if (!Number.isInteger(value) || value < min || (max !== undefined && value > max)) {
-            const upper = max === undefined ? "" : ` and <= ${max}`
-            throw new Error(`${label} must be an integer >= ${min}${upper}`)
+            throw new Error(`${label} must be an integer >= ${min}${max === undefined ? "" : ` and <= ${max}`}`)
         }
         return value
     }
@@ -97,7 +100,7 @@
     }
 
     function normalizeSamplers(value, label) {
-        if (!Array.isArray(value) || value.length === 0) {
+        if (!Array.isArray(value) || !value.length) {
             throw new Error(`${label} must contain at least one sampler`)
         }
         const ordered = []
@@ -113,26 +116,19 @@
     }
 
     function normalizeSettings(value, label) {
-        if (value === undefined || value === null) {
-            return {}
-        }
-        if (!isPlainObject(value)) {
-            throw new Error(`${label} must be an object`)
-        }
+        if (value === undefined || value === null) return {}
+        if (!isPlainObject(value)) throw new Error(`${label} must be an object`)
+
         const out = {}
         Object.entries(value).forEach(([key, item]) => {
-            if (!SETTING_KEYS.has(key)) {
-                throw new Error(`${label} contains unknown setting '${key}'`)
-            }
+            if (!SETTING_KEYS.has(key)) throw new Error(`${label} contains unknown setting '${key}'`)
             switch (key) {
                 case "prompt":
                 case "negative_prompt":
                 case "model":
                 case "vae_model":
                 case "scheduler":
-                    if (typeof item !== "string") {
-                        throw new Error(`${label}.${key} must be a string`)
-                    }
+                    if (typeof item !== "string") throw new Error(`${label}.${key} must be a string`)
                     out[key] = item
                     break
                 case "seed":
@@ -141,9 +137,7 @@
                 case "width":
                 case "height":
                     out[key] = integer(item, `${label}.${key}`, 64)
-                    if (out[key] % 64 !== 0) {
-                        throw new Error(`${label}.${key} must be a multiple of 64`)
-                    }
+                    if (out[key] % 64 !== 0) throw new Error(`${label}.${key} must be a multiple of 64`)
                     break
                 case "inference_steps":
                     out[key] = integer(item, `${label}.inference_steps`, 1)
@@ -167,15 +161,24 @@
                     break
                 case "endpoint_solver_states":
                 case "clip_skip":
-                    if (typeof item !== "boolean") {
-                        throw new Error(`${label}.${key} must be boolean`)
-                    }
+                case "stream_image_progress":
+                case "block_nsfw":
+                case "show_only_filtered_image":
+                    if (typeof item !== "boolean") throw new Error(`${label}.${key} must be boolean`)
                     out[key] = item
                     break
                 case "num_outputs":
                 case "num_outputs_parallel":
                     out[key] = integer(item, `${label}.${key}`, 1)
                     break
+                case "vram_usage_level": {
+                    const mode = nonEmptyString(item, `${label}.vram_usage_level`).toLowerCase()
+                    if (!["low", "balanced", "high"].includes(mode)) {
+                        throw new Error(`${label}.vram_usage_level must be low, balanced, or high`)
+                    }
+                    out[key] = mode
+                    break
+                }
                 default:
                     throw new Error(`Unsupported benchmark setting '${key}'`)
             }
@@ -196,9 +199,7 @@
             "capture_iterations",
         ]
         required.forEach((key) => {
-            if (settings[key] === undefined) {
-                throw new Error(`${label} is missing required setting '${key}'`)
-            }
+            if (settings[key] === undefined) throw new Error(`${label} is missing required setting '${key}'`)
         })
         if ((settings.num_outputs_parallel || 1) > (settings.num_outputs || 1)) {
             throw new Error(`${label}.num_outputs_parallel cannot exceed num_outputs`)
@@ -215,45 +216,36 @@
                 throw new Error(`Benchmark JSON is invalid: ${error.message}`)
             }
         }
-        if (!isPlainObject(value)) {
-            throw new Error("Benchmark must be a JSON object")
-        }
-        if (value.schema !== SCHEMA) {
-            throw new Error(`Benchmark schema must be '${SCHEMA}'`)
-        }
+        if (!isPlainObject(value)) throw new Error("Benchmark must be a JSON object")
+        if (value.schema !== SCHEMA) throw new Error(`Benchmark schema must be '${SCHEMA}'`)
 
         const name = nonEmptyString(value.name, "Benchmark name")
         const description = value.description === undefined ? "" : String(value.description)
         const defaults = normalizeSettings(value.defaults, "defaults")
         const rootSamplers = value.samplers === undefined ? null : normalizeSamplers(value.samplers, "samplers")
         const rawCases = value.cases === undefined ? [{ id: "default", label: "Default" }] : value.cases
-        if (!Array.isArray(rawCases) || rawCases.length === 0) {
-            throw new Error("cases must contain at least one case")
-        }
+        if (!Array.isArray(rawCases) || !rawCases.length) throw new Error("cases must contain at least one case")
 
         const ids = new Set()
         const cases = rawCases.map((rawCase, index) => {
-            if (!isPlainObject(rawCase)) {
-                throw new Error(`cases[${index}] must be an object`)
-            }
+            if (!isPlainObject(rawCase)) throw new Error(`cases[${index}] must be an object`)
             const id = nonEmptyString(rawCase.id ?? `case-${index + 1}`, `cases[${index}].id`)
             if (!/^[A-Za-z0-9._-]+$/.test(id)) {
                 throw new Error(`cases[${index}].id may contain only letters, numbers, dot, underscore, and hyphen`)
             }
-            if (ids.has(id)) {
-                throw new Error(`Duplicate benchmark case id '${id}'`)
-            }
+            if (ids.has(id)) throw new Error(`Duplicate benchmark case id '${id}'`)
             ids.add(id)
             const label = rawCase.label === undefined ? id : nonEmptyString(rawCase.label, `cases[${index}].label`)
-            const settings = normalizeSettings(rawCase.settings, `cases[${index}].settings`)
+            const override = normalizeSettings(rawCase.settings, `cases[${index}].settings`)
             const samplers = rawCase.samplers === undefined ? rootSamplers : normalizeSamplers(rawCase.samplers, `cases[${index}].samplers`)
-            if (!samplers) {
-                throw new Error(`cases[${index}] has no sampler list and no root samplers are defined`)
+            if (!samplers) throw new Error(`cases[${index}] has no sampler list and no root samplers are defined`)
+            return {
+                id,
+                label,
+                settings: validateResolvedSettings({ ...defaults, ...override }, `cases[${index}]`),
+                samplers: [...samplers],
             }
-            const resolved = validateResolvedSettings({ ...defaults, ...settings }, `cases[${index}]`)
-            return { id, label, settings: resolved, samplers }
         })
-
         return { schema: SCHEMA, name, description, cases }
     }
 
@@ -263,18 +255,17 @@
         let outputs = 0
         normalized.cases.forEach((testCase) => {
             tasks += testCase.samplers.length
-            if (sparseHelper) {
-                const steps = sparseHelper.parseCaptureExpression(
-                    testCase.settings.capture_iterations,
-                    testCase.settings.inference_steps
-                )
-                const count = sparseHelper.outputCountSummary(
-                    steps,
-                    testCase.settings.inference_steps,
-                    !!testCase.settings.endpoint_solver_states
-                )
-                outputs += count.totalOutputs * testCase.samplers.length * (testCase.settings.num_outputs || 1)
-            }
+            if (!sparseHelper) return
+            const steps = sparseHelper.parseCaptureExpression(
+                testCase.settings.capture_iterations,
+                testCase.settings.inference_steps
+            )
+            const count = sparseHelper.outputCountSummary(
+                steps,
+                testCase.settings.inference_steps,
+                !!testCase.settings.endpoint_solver_states
+            )
+            outputs += count.totalOutputs * testCase.samplers.length * (testCase.settings.num_outputs || 1)
         })
         return { cases: normalized.cases.length, tasks, outputs: sparseHelper ? outputs : null }
     }
@@ -286,49 +277,44 @@
         builtInExample: cloneJson(BUILT_IN_EXAMPLE),
     }
 
-    if (typeof document === "undefined") {
-        return
-    }
-    if (root.__flexDiffusionBenchmarkRunInstalled) {
-        return
-    }
+    if (typeof document === "undefined") return
+    if (root.__flexDiffusionBenchmarkRunInstalled) return
 
     function install() {
         const makeImageButton = document.querySelector("#makeImage")
-        const renderButtons = document.querySelector("#render-buttons")
         const samplerField = document.querySelector("#sampler_name")
-        const samplerOptions = document.querySelector("#sampler_compare_options")
         const captureField = document.querySelector("#output_after_step")
         const endpointField = document.querySelector("#capture_endpoint_solver_states")
-        if (
-            !makeImageButton ||
-            !renderButtons ||
-            !samplerField ||
-            !samplerOptions ||
-            !captureField ||
-            !endpointField ||
-            typeof makeImage !== "function" ||
-            typeof getCurrentUserRequest !== "function" ||
-            !root.__flexDiffusionSparseCaptureTest
-        ) {
+        const ready =
+            makeImageButton &&
+            samplerField &&
+            document.querySelector("#sampler_compare_options") &&
+            captureField &&
+            endpointField &&
+            document.querySelector("#vram_usage_level") &&
+            typeof makeImage === "function" &&
+            typeof getCurrentUserRequest === "function" &&
+            root.__flexDiffusionSparseCaptureTest
+        if (!ready) {
             root.setTimeout(install, 100)
             return
         }
-        if (root.__flexDiffusionBenchmarkRunInstalled) {
-            return
-        }
+        if (root.__flexDiffusionBenchmarkRunInstalled) return
         root.__flexDiffusionBenchmarkRunInstalled = true
 
         let activeContext = null
+        const sparseHelper = root.__flexDiffusionSparseCaptureTest
         const originalGetCurrentUserRequest = getCurrentUserRequest
         getCurrentUserRequest = function (...args) {
             const task = originalGetCurrentUserRequest.apply(this, args)
             if (activeContext && task?.reqBody) {
-                task.reqBody.benchmark_schema = SCHEMA
-                task.reqBody.benchmark_name = activeContext.name
-                task.reqBody.benchmark_run_id = activeContext.runId
-                task.reqBody.benchmark_case_id = activeContext.caseId
-                task.reqBody.benchmark_case_label = activeContext.caseLabel
+                Object.assign(task.reqBody, {
+                    benchmark_schema: SCHEMA,
+                    benchmark_name: activeContext.name,
+                    benchmark_run_id: activeContext.runId,
+                    benchmark_case_id: activeContext.caseId,
+                    benchmark_case_label: activeContext.caseLabel,
+                })
             }
             return task
         }
@@ -356,9 +342,7 @@
                     <h3 style="margin:0">Benchmark run</h3>
                     <button type="button" id="flex-benchmark-close" class="tertiaryButton smallButton">Close</button>
                 </div>
-                <p style="margin-bottom:8px">
-                    Paste a <code>${SCHEMA}</code> JSON block or load a JSON/text file. The complete benchmark is validated before any task is queued.
-                </p>
+                <p>Paste a <code>${SCHEMA}</code> JSON block or load a JSON/text file. The complete run is validated before anything is queued.</p>
                 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
                     <label class="button tertiaryButton smallButton" style="position:relative;overflow:hidden">
                         Load file
@@ -373,8 +357,7 @@
                     <button type="button" id="flex-benchmark-validate" class="tertiaryButton">Validate</button>
                     <button type="button" id="flex-benchmark-queue" class="primaryButton">Queue benchmark</button>
                 </div>
-            </div>
-        `
+            </div>`
         document.body.appendChild(dialog)
 
         const openButton = document.createElement("button")
@@ -386,50 +369,55 @@
 
         const textField = dialog.querySelector("#flex-benchmark-text")
         const fileField = dialog.querySelector("#flex-benchmark-file")
-        const fileName = dialog.querySelector("#flex-benchmark-file-name small")
+        const fileNameField = dialog.querySelector("#flex-benchmark-file-name small")
         const statusField = dialog.querySelector("#flex-benchmark-status")
         const queueButton = dialog.querySelector("#flex-benchmark-queue")
-        const sparseHelper = root.__flexDiffusionSparseCaptureTest
         textField.value = JSON.stringify(BUILT_IN_EXAMPLE, null, 2)
 
-        function setStatus(message, isError) {
+        function setStatus(message, error) {
             statusField.textContent = message
-            statusField.style.color = isError ? "var(--error-color, #b33)" : ""
+            statusField.style.color = error ? "var(--error-color, #b33)" : ""
         }
 
         function parseText() {
             const normalized = normalizeBenchmarkConfig(textField.value)
-            // Reuse the exact sparse-capture parser so a benchmark cannot queue
-            // an expression the normal UI would reject.
-            normalized.cases.forEach((testCase) => {
+            normalized.cases.forEach((testCase) =>
                 sparseHelper.parseCaptureExpression(
                     testCase.settings.capture_iterations,
                     testCase.settings.inference_steps
                 )
-            })
+            )
             return normalized
         }
 
-        function describe(normalized) {
-            const summary = benchmarkSummary({
-                schema: normalized.schema,
-                name: normalized.name,
-                description: normalized.description,
-                defaults: {},
-                cases: normalized.cases.map((item) => ({
-                    id: item.id,
-                    label: item.label,
-                    settings: item.settings,
-                    samplers: item.samplers,
-                })),
-            }, sparseHelper)
-            return `${normalized.name}: ${summary.cases} case${summary.cases === 1 ? "" : "s"}, ${summary.tasks} sampler task${summary.tasks === 1 ? "" : "s"}, ~${summary.outputs} output image${summary.outputs === 1 ? "" : "s"}.`
+        function summaryForNormalized(normalized) {
+            let tasks = 0
+            let outputs = 0
+            normalized.cases.forEach((testCase) => {
+                tasks += testCase.samplers.length
+                const steps = sparseHelper.parseCaptureExpression(
+                    testCase.settings.capture_iterations,
+                    testCase.settings.inference_steps
+                )
+                const count = sparseHelper.outputCountSummary(
+                    steps,
+                    testCase.settings.inference_steps,
+                    !!testCase.settings.endpoint_solver_states
+                )
+                outputs += count.totalOutputs * testCase.samplers.length * (testCase.settings.num_outputs || 1)
+            })
+            return { tasks, outputs }
         }
 
         function validateText() {
             try {
                 const normalized = parseText()
-                setStatus(`Valid — ${describe(normalized)}`, false)
+                const summary = summaryForNormalized(normalized)
+                setStatus(
+                    `Valid — ${normalized.name}: ${normalized.cases.length} case${normalized.cases.length === 1 ? "" : "s"}, ` +
+                        `${summary.tasks} sampler task${summary.tasks === 1 ? "" : "s"}, ~${summary.outputs} output image${summary.outputs === 1 ? "" : "s"}.`,
+                    false
+                )
                 return normalized
             } catch (error) {
                 setStatus(error.message || String(error), true)
@@ -437,77 +425,79 @@
             }
         }
 
-        const touchedSelectors = [
-            "#prompt",
-            "#negative_prompt",
-            "#seed",
-            "#stable_diffusion_model",
-            "#width",
-            "#height",
-            "#num_inference_steps",
-            "#guidance_scale",
-            "#output_format",
-            "#output_quality",
-            "#output_after_step",
-            "#capture_endpoint_solver_states",
-            "#num_outputs_total",
-            "#num_outputs_parallel",
-            "#clip_skip",
-            "#vae_model",
-            "#scheduler_name",
-            "#sampler_name",
-        ]
-
-        function snapshotUi() {
-            const fields = {}
-            touchedSelectors.forEach((selector) => {
-                const field = document.querySelector(selector)
-                if (!field) return
-                fields[selector] = field.type === "checkbox" ? !!field.checked : field.value
-            })
-            const extras = Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]:checked')).map((input) => input.value)
-            return { fields, extras }
+        const ordinarySelectors = {
+            prompt: "#prompt",
+            negative_prompt: "#negative_prompt",
+            seed: "#seed",
+            width: "#width",
+            height: "#height",
+            inference_steps: "#num_inference_steps",
+            guidance_scale: "#guidance_scale",
+            output_format: "#output_format",
+            output_quality: "#output_quality",
+            capture_iterations: "#output_after_step",
+            endpoint_solver_states: "#capture_endpoint_solver_states",
+            num_outputs: "#num_outputs_total",
+            num_outputs_parallel: "#num_outputs_parallel",
+            clip_skip: "#clip_skip",
+            scheduler: "#scheduler_name",
+            vram_usage_level: "#vram_usage_level",
+            stream_image_progress: "#stream_image_progress",
+            block_nsfw: "#block_nsfw",
+            show_only_filtered_image: "#show_only_filtered_image",
         }
 
-        function setValue(selector, value) {
-            if (value === undefined) return
-            const field = document.querySelector(selector)
-            if (!field) {
-                throw new Error(`Benchmark setting requires unavailable UI field ${selector}`)
-            }
-            if (field.type === "checkbox") {
-                field.checked = !!value
-            } else {
-                field.value = String(value)
-            }
+        function fire(field) {
             field.dispatchEvent(new Event("input", { bubbles: true }))
             field.dispatchEvent(new Event("change", { bubbles: true }))
         }
 
-        function applySettings(settings) {
-            setValue("#prompt", settings.prompt)
-            setValue("#negative_prompt", settings.negative_prompt ?? "")
-            setValue("#seed", settings.seed)
-            setValue("#stable_diffusion_model", settings.model)
-            setValue("#width", settings.width)
-            setValue("#height", settings.height)
-            setValue("#num_inference_steps", settings.inference_steps)
-            setValue("#guidance_scale", settings.guidance_scale)
-            setValue("#output_format", settings.output_format)
-            setValue("#output_quality", settings.output_quality)
-            setValue("#output_after_step", settings.capture_iterations)
-            setValue("#capture_endpoint_solver_states", !!settings.endpoint_solver_states)
-            setValue("#num_outputs_total", settings.num_outputs ?? 1)
-            setValue("#num_outputs_parallel", settings.num_outputs_parallel ?? 1)
-            setValue("#clip_skip", !!settings.clip_skip)
-            setValue("#vae_model", settings.vae_model ?? "")
-            setValue("#scheduler_name", settings.scheduler)
+        function modelValue(kind) {
+            if (kind === "model" && typeof stableDiffusionModelField !== "undefined") return stableDiffusionModelField.value
+            if (kind === "vae_model" && typeof vaeModelField !== "undefined") return vaeModelField.value
+            const selector = kind === "model" ? "#stable_diffusion_model" : "#vae_model"
+            return document.querySelector(selector)?.dataset?.path || ""
         }
 
-        function currentSamplerSelection() {
-            const primary = document.querySelector("#sampler_name")?.value
-            const extras = Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]:checked')).map((input) => input.value)
-            return [primary, ...extras].filter(Boolean)
+        function setModelValue(kind, value) {
+            if (value === undefined) return
+            if (kind === "model" && typeof stableDiffusionModelField !== "undefined") {
+                stableDiffusionModelField.value = String(value)
+                stableDiffusionModelField.dispatchEvent(new Event("change", { bubbles: true }))
+                return
+            }
+            if (kind === "vae_model" && typeof vaeModelField !== "undefined") {
+                vaeModelField.value = String(value)
+                vaeModelField.dispatchEvent(new Event("change", { bubbles: true }))
+                return
+            }
+            const selector = kind === "model" ? "#stable_diffusion_model" : "#vae_model"
+            const field = document.querySelector(selector)
+            if (!field) throw new Error(`Benchmark setting requires unavailable UI field ${selector}`)
+            field.dataset.path = String(value)
+            field.value = String(value)
+            fire(field)
+        }
+
+        function setOrdinaryValue(selector, value) {
+            if (value === undefined) return
+            const field = document.querySelector(selector)
+            if (!field) throw new Error(`Benchmark setting requires unavailable UI field ${selector}`)
+            if (field.type === "checkbox") field.checked = !!value
+            else field.value = String(value)
+            fire(field)
+        }
+
+        function applySettings(settings) {
+            Object.entries(ordinarySelectors).forEach(([key, selector]) => setOrdinaryValue(selector, settings[key]))
+            setModelValue("model", settings.model)
+            setModelValue("vae_model", settings.vae_model ?? "")
+        }
+
+        function selectedExtraSamplers() {
+            return Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]:checked')).map(
+                (input) => input.value
+            )
         }
 
         function setSamplerSelection(samplers) {
@@ -515,34 +505,54 @@
             const field = document.querySelector("#sampler_name")
             const available = new Set(Array.from(field.options || []).map((option) => option.value).filter(Boolean))
             requested.forEach((name) => {
-                if (!available.has(name)) {
-                    throw new Error(`Sampler '${name}' is not available in the current backend`)
-                }
+                if (!available.has(name)) throw new Error(`Sampler '${name}' is not available in the current backend`)
             })
 
-            Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]:checked')).forEach((checkbox) => {
-                checkbox.checked = false
-                checkbox.dispatchEvent(new Event("change", { bubbles: true }))
+            selectedExtraSamplers().forEach((name) => {
+                const checkbox = Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]')).find(
+                    (item) => item.value === name
+                )
+                if (checkbox) {
+                    checkbox.checked = false
+                    checkbox.dispatchEvent(new Event("change", { bubbles: true }))
+                }
             })
 
             field.value = requested[0]
             field.dispatchEvent(new Event("change", { bubbles: true }))
             requested.slice(1).forEach((name) => {
-                const checkbox = Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]')).find((item) => item.value === name)
-                if (!checkbox) {
-                    throw new Error(`Sampler '${name}' could not be selected for comparison`)
-                }
+                const checkbox = Array.from(document.querySelectorAll('#sampler_compare_options input[type="checkbox"]')).find(
+                    (item) => item.value === name
+                )
+                if (!checkbox) throw new Error(`Sampler '${name}' could not be selected for comparison`)
                 checkbox.checked = true
                 checkbox.dispatchEvent(new Event("change", { bubbles: true }))
             })
         }
 
-        function restoreUi(snapshot) {
-            Object.entries(snapshot.fields).forEach(([selector, value]) => setValue(selector, value))
-            const primary = snapshot.fields["#sampler_name"]
-            if (primary) {
-                setSamplerSelection([primary, ...snapshot.extras.filter((name) => name !== primary)])
+        function snapshotUi() {
+            const values = {}
+            Object.entries(ordinarySelectors).forEach(([key, selector]) => {
+                const field = document.querySelector(selector)
+                if (!field) return
+                values[key] = field.type === "checkbox" ? !!field.checked : field.value
+            })
+            return {
+                values,
+                model: modelValue("model"),
+                vae_model: modelValue("vae_model"),
+                sampler: document.querySelector("#sampler_name")?.value || "",
+                extras: selectedExtraSamplers(),
             }
+        }
+
+        function restoreUi(snapshot) {
+            Object.entries(ordinarySelectors).forEach(([key, selector]) => {
+                if (snapshot.values[key] !== undefined) setOrdinaryValue(selector, snapshot.values[key])
+            })
+            setModelValue("model", snapshot.model)
+            setModelValue("vae_model", snapshot.vae_model)
+            if (snapshot.sampler) setSamplerSelection([snapshot.sampler, ...snapshot.extras])
         }
 
         function assertPlainTxt2ImgRequest(task, caseId) {
@@ -557,32 +567,50 @@
                 "use_hypernetwork_model",
                 "use_lora_model",
                 "ref_images",
-            ].filter((key) => req[key] !== undefined && req[key] !== null && req[key] !== false && req[key] !== "" && (!Array.isArray(req[key]) || req[key].length > 0))
+                "active_tags",
+                "inactive_tags",
+            ].filter((key) => {
+                const value = req[key]
+                if (Array.isArray(value)) return value.length > 0
+                return value !== undefined && value !== null && value !== false && value !== ""
+            })
             if (forbidden.length) {
-                throw new Error(`Benchmark case '${caseId}' requires plain txt2img for v1; disable current UI features: ${forbidden.join(", ")}`)
+                throw new Error(
+                    `Benchmark case '${caseId}' requires plain txt2img for v1; clear/disable current UI features: ${forbidden.join(", ")}`
+                )
+            }
+            if (document.querySelector("#process_order_toggle")?.checked) {
+                throw new Error("Benchmark runs require 'Process newest jobs first' to be OFF so sampler order remains reproducible")
             }
         }
 
         function makeRunId(name) {
-            const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "benchmark"
-            return `${slug}-${Date.now().toString(36)}`
+            const slug = name
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "")
+                .slice(0, 48) || "benchmark"
+            return `${slug}-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`
         }
 
         function queueBenchmark() {
             const normalized = validateText()
             if (!normalized) return
+            if (typeof SD !== "undefined" && SD?.activeTasks?.size > 0) {
+                setStatus("Benchmark not queued: wait for currently active generation tasks to finish first.", true)
+                return
+            }
+
             const snapshot = snapshotUi()
             const runId = makeRunId(normalized.name)
             let queued = 0
             queueButton.disabled = true
             try {
-                // Preflight every case before queueing anything. This prevents a
-                // typo or stale UI feature from leaving a half-enqueued benchmark.
+                // Preflight all cases before any call to makeImage().
                 normalized.cases.forEach((testCase) => {
                     applySettings(testCase.settings)
                     setSamplerSelection(testCase.samplers)
-                    const probe = getCurrentUserRequest()
-                    assertPlainTxt2ImgRequest(probe, testCase.id)
+                    assertPlainTxt2ImgRequest(getCurrentUserRequest(), testCase.id)
                 })
 
                 normalized.cases.forEach((testCase) => {
@@ -595,10 +623,13 @@
                         caseLabel: testCase.label,
                     }
                     makeImage()
-                    queued += testCase.samplers.length
                     activeContext = null
+                    queued += testCase.samplers.length
                 })
-                setStatus(`Queued benchmark '${normalized.name}' as run ${runId}: ${queued} sampler task${queued === 1 ? "" : "s"}.`, false)
+                setStatus(
+                    `Queued '${normalized.name}' as ${runId}: ${queued} sampler task${queued === 1 ? "" : "s"}.`,
+                    false
+                )
             } catch (error) {
                 activeContext = null
                 setStatus(`Benchmark not queued: ${error.message || error}`, true)
@@ -619,7 +650,7 @@
         dialog.querySelector("#flex-benchmark-close").addEventListener("click", () => dialog.close())
         dialog.querySelector("#flex-benchmark-example").addEventListener("click", () => {
             textField.value = JSON.stringify(BUILT_IN_EXAMPLE, null, 2)
-            fileName.textContent = "built-in baseline"
+            fileNameField.textContent = "built-in baseline"
             validateText()
         })
         dialog.querySelector("#flex-benchmark-validate").addEventListener("click", validateText)
@@ -629,7 +660,7 @@
             if (!file) return
             try {
                 textField.value = await file.text()
-                fileName.textContent = file.name
+                fileNameField.textContent = file.name
                 validateText()
             } catch (error) {
                 setStatus(`Could not read benchmark file: ${error.message || error}`, true)
@@ -639,7 +670,6 @@
         dialog.addEventListener("click", (event) => {
             if (event.target === dialog) dialog.close()
         })
-
         validateText()
     }
 
