@@ -1,0 +1,39 @@
+{
+  "schema": "flexdiffusion-benchmark/v1",
+  "name": "Cyberdino sparse sampler baseline",
+  "description": "SD1.4 seed-2 sampler sweep using sparse denoised trajectory observations. Designed as a compact reproducible benchmark/review archive.",
+  "defaults": {
+    "prompt": "cyberpunk dinosaur mercenary",
+    "negative_prompt": "",
+    "seed": 2,
+    "model": "sd-v1-4",
+    "width": 512,
+    "height": 512,
+    "inference_steps": 20,
+    "guidance_scale": 7.5,
+    "output_format": "png",
+    "capture_iterations": "10, 16, 18-20",
+    "endpoint_solver_states": false,
+    "num_outputs": 1,
+    "num_outputs_parallel": 1,
+    "clip_skip": false,
+    "vae_model": ""
+  },
+  "samplers": [
+    "dpmpp_2m",
+    "heun",
+    "euler",
+    "euler_a",
+    "dpm2",
+    "dpm2_a",
+    "lms",
+    "dpmpp_2s_a",
+    "dpmpp_sde"
+  ],
+  "cases": [
+    {
+      "id": "baseline",
+      "label": "SD1.4 seed 2 sparse sampler sweep"
+    }
+  ]
+}
