@@ -48,12 +48,17 @@ Example:
     "inference_steps": 20,
     "guidance_scale": 7.5,
     "output_format": "png",
+    "output_quality": 75,
     "capture_iterations": "10, 16, 18-20",
     "endpoint_solver_states": false,
     "num_outputs": 1,
     "num_outputs_parallel": 1,
     "clip_skip": false,
-    "vae_model": ""
+    "vae_model": "",
+    "vram_usage_level": "low",
+    "stream_image_progress": false,
+    "block_nsfw": false,
+    "show_only_filtered_image": false
   },
   "samplers": [
     "dpmpp_2m",
@@ -79,15 +84,17 @@ The expression `10, 16, 18-20` produces denoised observations at 10, 16, 18 and 
 
 ## Supported v1 settings
 
-`prompt`, `negative_prompt`, `seed`, `model`, `width`, `height`, `inference_steps`, `guidance_scale`, `output_format`, `output_quality`, `capture_iterations`, `endpoint_solver_states`, `num_outputs`, `num_outputs_parallel`, `clip_skip`, `vae_model`, and `scheduler`.
+`prompt`, `negative_prompt`, `seed`, `model`, `width`, `height`, `inference_steps`, `guidance_scale`, `output_format`, `output_quality`, `capture_iterations`, `endpoint_solver_states`, `num_outputs`, `num_outputs_parallel`, `clip_skip`, `vae_model`, `scheduler`, `vram_usage_level`, `stream_image_progress`, `block_nsfw`, and `show_only_filtered_image`.
 
-The sparse capture expression is validated with the exact same parser used by the normal Capture iterations UI.
+The sparse capture expression is validated with the exact same parser used by the normal Capture iterations UI. Model and VAE settings are applied through Easy Diffusion's model-dropdown objects rather than by editing only their visible text fields, so the path used by the actual request is the benchmark value.
 
 ## Safety / experimental hygiene
 
-Benchmark schema v1 is intentionally plain txt2img. During preflight it refuses to queue if the current UI would inject an init image, mask, ControlNet, face correction, upscaler, Hypernetwork, LoRA, reference image, or similar unsupported modifier. This prevents stale UI state from contaminating a nominally controlled benchmark.
+Benchmark schema v1 is intentionally plain txt2img. During preflight it refuses to queue if the current UI would inject an init image, mask, ControlNet, face correction, upscaler, Hypernetwork, LoRA, reference image, or image modifier/tag. This prevents stale UI state from contaminating a nominally controlled benchmark.
 
-The sampler list is also checked against the sampler options available in the current backend. The existing Output After Step compatibility gate remains authoritative, so this feature does not claim new sampler support.
+It also refuses to start while another render is active and requires **Process newest jobs first** to be off, preserving the benchmark's declared sampler order. The reference Cyberdino benchmark pins low-VRAM mode and disables live previews, NSFW post-filtering, and filtered-only output so timing and outputs are not silently changed by remembered UI settings.
+
+The sampler list is checked against the sampler options available in the current backend. The existing Output After Step compatibility gate remains authoritative, so this feature does not claim new sampler support.
 
 ## Provenance
 
