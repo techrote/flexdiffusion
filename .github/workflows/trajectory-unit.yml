@@ -36,6 +36,7 @@ jobs:
         run: |
           node --check ui/plugins/ui/trajectory-output-steps.plugin.js
           node --check ui/plugins/ui/sampler-comparison.plugin.js
+          node --check ui/plugins/ui/benchmark-run.plugin.js
           node --check ui/plugins/ui/review-capture.plugin.js
       - name: Check sparse capture helper semantics
         run: |
@@ -70,6 +71,39 @@ jobs:
           assert.deepStrictEqual(helper('heun', ['dpmpp_2m', 'heun', 'euler']), ['heun', 'dpmpp_2m', 'euler'])
           assert.deepStrictEqual(helper('dpmpp_2m', []), ['dpmpp_2m'])
           assert.deepStrictEqual(helper('', ['heun', 'heun']), ['heun'])
+          NODE
+      - name: Check benchmark run helper semantics
+        run: |
+          node <<'NODE'
+          const assert = require('assert')
+          require('./ui/plugins/ui/trajectory-output-steps.plugin.js')
+          require('./ui/plugins/ui/benchmark-run.plugin.js')
+          const helper = globalThis.__flexDiffusionBenchmarkRunTest
+          const sparse = globalThis.__flexDiffusionSparseCaptureTest
+          assert.strictEqual(helper.schema, 'flexdiffusion-benchmark/v1')
+          const normalized = helper.normalizeBenchmarkConfig(helper.builtInExample)
+          assert.strictEqual(normalized.name, 'Cyberdino sparse sampler baseline')
+          assert.strictEqual(normalized.cases.length, 1)
+          assert.strictEqual(normalized.cases[0].samplers.length, 9)
+          assert.strictEqual(normalized.cases[0].settings.capture_iterations, '10, 16, 18-20')
+          assert.deepStrictEqual(helper.benchmarkSummary(helper.builtInExample, sparse), {
+            cases: 1,
+            tasks: 9,
+            outputs: 45,
+          })
+          const twoCase = JSON.parse(JSON.stringify(helper.builtInExample))
+          twoCase.cases.push({
+            id: 'seed-3',
+            label: 'Seed 3',
+            settings: { seed: 3 },
+            samplers: ['heun', 'euler'],
+          })
+          const expanded = helper.normalizeBenchmarkConfig(twoCase)
+          assert.strictEqual(expanded.cases[1].settings.seed, 3)
+          assert.deepStrictEqual(expanded.cases[1].samplers, ['heun', 'euler'])
+          const bad = JSON.parse(JSON.stringify(helper.builtInExample))
+          bad.defaults.typo_setting = 1
+          assert.throws(() => helper.normalizeBenchmarkConfig(bad), /unknown setting/)
           NODE
       - name: Check review capture helper semantics
         run: |
