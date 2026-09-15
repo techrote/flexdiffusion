@@ -12,6 +12,7 @@ Read in this order:
 - `FIRST_GPU_RUN.md` — exact Windows procedure for the first GTX 1650 Super validation;
 - `OUTPUT_AFTER_STEP_MVP.md` — first user-facing trajectory probe: render selected completed-step states into the normal output panel;
 - `SAMPLER_COMPARISON.md` — repeat one request through multiple samplers as separate tasks, with fixed-seed comparison defaults;
+- `BENCHMARK_RUNS.md` — queue a complete versioned sampler/trajectory test from pasted or file-loaded JSON;
 - `REVIEW_CAPTURE.md` — export visible experiment results as a timestamp-matched PNG plus editable Markdown/JSON metadata sidecar;
 - `SAMPLER_RESUME_RESEARCH.md` — preliminary solver-state audit for later exact branching.
 
