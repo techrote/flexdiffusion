@@ -12,12 +12,17 @@
     "inference_steps": 20,
     "guidance_scale": 7.5,
     "output_format": "png",
+    "output_quality": 75,
     "capture_iterations": "10, 16, 18-20",
     "endpoint_solver_states": false,
     "num_outputs": 1,
     "num_outputs_parallel": 1,
     "clip_skip": false,
-    "vae_model": ""
+    "vae_model": "",
+    "vram_usage_level": "low",
+    "stream_image_progress": false,
+    "block_nsfw": false,
+    "show_only_filtered_image": false
   },
   "samplers": [
     "dpmpp_2m",
