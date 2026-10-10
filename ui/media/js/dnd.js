@@ -266,6 +266,20 @@ const TASK_MAPPING = {
         readUI: () => samplerField.value,
         parse: (val) => val,
     },
+    circuit_bend: {
+        name: "Circuit Bend",
+        // The plugin restores its dynamically created controls after this pass.
+        setUI: () => {},
+        readUI: () => window.__flexDiffusionReadCircuitBend?.() ?? null,
+        parse: (val) => typeof val === "string" ? JSON.parse(val) : val,
+    },
+    bend_grid: {
+        name: "Bend Grid",
+        setUI: () => {},
+        // New manual renders are independent of the original comparison cell.
+        readUI: () => null,
+        parse: (val) => typeof val === "string" ? JSON.parse(val) : val,
+    },
     scheduler_name: {
         name: "Scheduler",
         setUI: (scheduler_name) => {
@@ -675,6 +689,8 @@ const TASK_TEXT_MAPPING = {
     use_upscale: "Use Upscaling",
     upscale_amount: "Upscale By",
     sampler_name: "Sampler",
+    circuit_bend: "Circuit Bend",
+    bend_grid: "Bend Grid",
     scheduler_name: "Scheduler",
     negative_prompt: "Negative Prompt",
     use_stable_diffusion_model: "Stable Diffusion model",

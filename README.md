@@ -1,4 +1,9 @@
 # Easy Diffusion 3.0
+
+This FlexDiffusion fork explores intermediate diffusion output and experimental
+sampler circuit bending. See the [animated gallery and pipeline guide](docs/trajectory-lab/SAMPLER_ART_PROGRESS_2026-10-10.md),
+[control reference](docs/trajectory-lab/SAMPLER_OUTPUT_AND_BENDS.md), and
+[Trajectory Lab](docs/trajectory-lab/README.md).
 ### An easy way to install and use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) on your computer.
 
 Does not require technical knowledge, does not require pre-installed software. 1-click install, powerful features, friendly community.

@@ -1,0 +1,604 @@
+{
+  "schema": "flexdiffusion-step-gif/v1",
+  "source_evidence": "sampler-interlace-20261010",
+  "render": {
+    "name": "plms-alternate-shared-seed4",
+    "request": {
+      "prompt": "A single humanoid dinosaur cyborg mercenary standing upright, two long robotic legs, two mechanical arms, armored torso, green scaly reptilian head and toothed snout. Holding a futuristic kinetic anti-materiel rifle in both clawed hands, long barrel and scope. Full-length centered character design, entire head and feet visible, neon city, science fiction illustration.",
+      "negative_prompt": "human face, human skin, man, woman, quadruped, multiple characters, duplicate bodies, crowd, helmet, mask, cropped head, cropped feet, close-up, extra limbs, text, watermark",
+      "seed": 4,
+      "width": 512,
+      "height": 512,
+      "num_outputs": 1,
+      "num_inference_steps": 16,
+      "guidance_scale": 10,
+      "init_image": null,
+      "control_image": null,
+      "sampler_name": "plms"
+    },
+    "circuit_bend": {
+      "enabled": true,
+      "mode": "sampler_mix",
+      "mix_method": "alternate",
+      "mix_first": "plms",
+      "mix_block": 1,
+      "mix_history": "shared",
+      "mix_exchange": 0.5,
+      "mix_output": "blend",
+      "mix_curve": "constant",
+      "mix_period": 8,
+      "schedule": "exact",
+      "eta": 0.0,
+      "history_source": "freeze",
+      "blend_target": "history",
+      "donor_seed": 3,
+      "blend_curve": "constant",
+      "blend_start": 0,
+      "blend_end": 1,
+      "blend_period": 4,
+      "churn": 10.0,
+      "noise": 1.0,
+      "start": 1,
+      "end": null,
+      "window_unit": "iterations",
+      "every": 1,
+      "seed": 123,
+      "pattern": "fresh",
+      "memory": null,
+      "fade_in": 0,
+      "fade_out": 0,
+      "history_strength": 1
+    },
+    "sha256": "c73095961e6be4d23762545feed649e7ad51084f9dee8ca5976d0e6d1a23085c",
+    "noise_seed": null,
+    "donor_seed": null,
+    "repeat_all_steps_exact": null,
+    "step_sha256": [
+      "0b34314ae87b5f9bd48c27b4c7e8a7eaacb2ce3fe4e07b8476ef514b501fabe9",
+      "6d5773f9dbfaf69c437fd1b931bb9672c63117f330654337600414a641d36674",
+      "292b067d737779877756a5ef3efdf31ac04af9c5831bfffc2cf3f4c60e805776",
+      "a3209af6c6ff4f1b26487d21031816170845a15105de0bb2a7de5e5d2d61d461",
+      "5f38c49fbfa6d31f3e1ada670b833ec78e3b0fde93013867589439dde3057316",
+      "2b81aae80e28856c1c2a9171f9cd34246747bb7e47c717504b72be55e9b68930",
+      "200d16080bcd6e75f5721920cc2f378616c12d260b5e4b4d064cc66bb6efe202",
+      "f8f59072cc24299c0b475353c89a371c8bdc6d05a7b4f7aaa0a0b4af1226b584",
+      "9fed9a258056017ddcfb6d1ca5073421f8f8f6f29e57ae7fbf1b6a008811388c",
+      "66d65fe8ada35be2a4659f6d3b458f54698aebe63e2b82d47e08c724ace708fd",
+      "00aaeff241a2980645a00ee1546703385b9e935e423776c77030361371a20cc4",
+      "b5975eaae7db8ce7c5a507938c707bb81927afdfd845edf7546627b6bacec818",
+      "5d07283d45e044a4a74aa0cb5e133c0e43a38001bddb9839eda7a4147c562993",
+      "36ef0f5ca8a60da2fdff3083aec1c7c16eb690cae1d94646b6b1730b2489c304",
+      "680c3c4d5c6600a7eadb1e5989b7d5ba80b52d64b3f21f730a2f5107b76d1e3a",
+      "c73095961e6be4d23762545feed649e7ad51084f9dee8ca5976d0e6d1a23085c"
+    ],
+    "observations": [
+      {
+        "step": 1,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 938,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 1,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 0,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 1 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 2,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 876,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 2,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 1,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 2 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 3,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 813,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 3,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 2,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 3 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 4,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 751,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 4,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 4 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 5,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 688,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 5,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 5 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 6,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 626,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 6,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 6 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 7,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 563,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 7,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 7 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 8,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 501,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 8,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 8 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 9,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 438,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 9,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 9 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 10,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 376,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 10,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 10 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 11,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 313,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 11,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 11 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 12,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 251,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 12,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 12 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 13,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 188,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 13,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 13 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 14,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 126,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "ddim",
+          "sampler_iteration": 14,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0.0,
+          "noise_seed": 123,
+          "representation_label": "DDIM update 14 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 15,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 63,
+          "observation_phase": "after_update",
+          "estimate_basis": "sampler_mix_update",
+          "active_sampler": "plms",
+          "sampler_iteration": 15,
+          "mix_method": "alternate",
+          "mix_history": "shared",
+          "history_length": 3,
+          "exchange_weight": 0,
+          "mix_output": "shared_latent",
+          "eta": 0,
+          "noise_seed": 123,
+          "representation_label": "PLMS update 15 clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 16,
+        "representation": "final",
+        "metadata": {
+          "observation_phase": "final_return",
+          "sampler_iteration": 16,
+          "active_sampler": "ddim"
+        }
+      }
+    ],
+    "sampling_metadata": {
+      "sampler_name": "plms",
+      "requested_steps": 16,
+      "actual_steps": 16,
+      "completed_steps": 16,
+      "status": "complete",
+      "circuit_bend": {
+        "enabled": true,
+        "mode": "sampler_mix",
+        "mix_method": "alternate",
+        "mix_first": "plms",
+        "mix_block": 1,
+        "mix_history": "shared",
+        "mix_exchange": 0.5,
+        "mix_output": "blend",
+        "mix_curve": "constant",
+        "mix_period": 8,
+        "schedule": "exact",
+        "eta": 0.0,
+        "history_source": "freeze",
+        "blend_target": "history",
+        "donor_seed": 3,
+        "blend_curve": "constant",
+        "blend_start": 0.0,
+        "blend_end": 1.0,
+        "blend_period": 4,
+        "churn": 10.0,
+        "noise": 1.0,
+        "start": 1.0,
+        "end": null,
+        "window_unit": "iterations",
+        "every": 1,
+        "seed": 123,
+        "pattern": "fresh",
+        "memory": null,
+        "fade_in": 0.0,
+        "fade_out": 0.0,
+        "history_strength": 1.0
+      },
+      "schedule": "exact",
+      "timesteps": [
+        1,
+        63,
+        126,
+        188,
+        251,
+        313,
+        376,
+        438,
+        501,
+        563,
+        626,
+        688,
+        751,
+        813,
+        876,
+        938
+      ],
+      "sampler_pair": [
+        "plms",
+        "ddim"
+      ],
+      "mix_method": "alternate",
+      "mix_history": "shared"
+    }
+  },
+  "playback": {
+    "speed_slider": 8,
+    "continuous": true,
+    "endpoint_hold_ms": 1000,
+    "duration_ms": 5640,
+    "timeline": [
+      {
+        "step": 1,
+        "delay": 100
+      },
+      {
+        "step": 2,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 16,
+        "delay": 100
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 2,
+        "delay": 13
+      }
+    ]
+  },
+  "export": {
+    "file": "plms-alternate-shared-seed4.gif",
+    "bytes": 4148686,
+    "sha256": "daebcc02163e5964e0d0d975047c211854a57fa0f4fbc0c3e202032db7dc1f6c",
+    "frames": 30,
+    "width": 512,
+    "height": 512,
+    "palette": "Existing viewer 256-colour per-frame palette",
+    "encoder": "Pillow LZW; decoded RGB and timing verified against viewer data"
+  }
+}

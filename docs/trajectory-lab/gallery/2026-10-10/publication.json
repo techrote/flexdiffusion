@@ -1,0 +1,162 @@
+{
+  "date": "2026-10-10",
+  "checkpoint": {
+    "name": "sd-v1-4.ckpt",
+    "sha256": "fe4efff1e174c627256e44ec2991ba279b3816e364b49f9be2abc0b3ff3f8556",
+    "hash_checked_during_publication": true
+  },
+  "runtime": {
+    "sdkit": "2.1.1",
+    "stable-diffusion-sdkit": "2.1.5",
+    "k-diffusion": "0.0.12",
+    "gpu": "NVIDIA TITAN RTX",
+    "vram_mode": "high"
+  },
+  "gallery": [
+    "ddim-held-seed2.gif",
+    "plms-alternate-shared-seed4.gif",
+    "plms-alternate-stale-seed2.gif",
+    "plms-coupled-oscillate-seed3.gif",
+    "plms-coupled-oscillate-seed5.gif",
+    "plms-independent-oscillate-seed3.gif"
+  ],
+  "local_batches": [
+    {
+      "evidence_directory": "plms-all-steps-20261010",
+      "sequences": 12,
+      "exported_frames": 240,
+      "seeds": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "guidance": [
+        7.5
+      ],
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ],
+      "frame_count_basis": "Existing *-step*.png files"
+    },
+    {
+      "evidence_directory": "plms-character-cfg-v2-20261010",
+      "sequences": 96,
+      "exported_frames": 1536,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "guidance": [
+        9,
+        10,
+        11,
+        12
+      ],
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ]
+    },
+    {
+      "evidence_directory": "plms-cyborg-portrait-v2-20261010",
+      "sequences": 128,
+      "exported_frames": 2048,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "guidance": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "sizes": [
+        [
+          512,
+          1024
+        ]
+      ]
+    },
+    {
+      "evidence_directory": "seed-bends-ddim-20261010",
+      "sequences": 36,
+      "exported_frames": 576,
+      "seeds": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "guidance": [
+        10
+      ],
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ]
+    },
+    {
+      "evidence_directory": "sampler-interlace-20261010",
+      "sequences": 28,
+      "exported_frames": 448,
+      "seeds": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "guidance": [
+        10
+      ],
+      "sizes": [
+        [
+          512,
+          512
+        ]
+      ]
+    }
+  ],
+  "publication_checks": {
+    "python_tests_passed": 68,
+    "ui_contract_tests": true,
+    "optional_linkedom_form_tests": true,
+    "player_tests": true,
+    "gif_count": 6,
+    "gif_timeline_frames_each": 30,
+    "gif_duration_ms_each": 5640,
+    "gif_decoded_pixels_and_timing_verified": true
+  }
+}
