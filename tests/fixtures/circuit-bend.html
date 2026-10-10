@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Circuit bend browser fixture</title>
+<link rel="stylesheet" href="/ui/media/css/main.css"><link rel="stylesheet" href="/ui/media/css/themes.css">
+<style>body{padding:24px;background:#222;color:#ddd;font:15px sans-serif}td{padding:9px;vertical-align:top}input,select,textarea{background:#333;color:#eee}small{max-width:650px}textarea{display:block;width:95%;height:180px}button{margin:3px}.simple-tooltip{display:none}</style>
+</head><body>
+<h1>Circuit bend browser fixture</h1><p>UI integration fixture. Queueing records requests locally; no GPU renders are started.</p>
+<table><tr><td><label for="backend">Backend</label></td><td><select id="backend"><option value="ed_classic">Classic</option><option value="ed_diffusers">Diffusers</option></select></td></tr>
+<tr><td><label for="sampler_name">Sampler</label></td><td><select id="sampler_name"><option value="euler">Euler</option><option value="heun">Heun</option><option value="plms">PLMS</option><option value="ddim">DDIM</option></select></td></tr>
+<tr><td><label for="num_inference_steps">Inference Steps</label></td><td><input id="num_inference_steps" value="20" type="number"></td></tr>
+<tr><td><label for="seed">Seed</label></td><td><input id="seed" value="2" type="number"></td></tr>
+<tr><td><label for="prompt">Prompt</label></td><td><input id="prompt" value="cyberpunk dinosaur mercenary"></td></tr></table>
+<div id="init_image_preview_container"></div>
+<button onclick="try{request.value=JSON.stringify(getCurrentUserRequest(),null,2)}catch(e){request.value=e.message}">Build request</button>
+<button onclick="restoreTaskToUI(JSON.parse(request.value))">Restore request</button>
+<button onclick="completeFixture()">Simulate completed results</button>
+<button onclick="request.value=JSON.stringify(queued,null,2)">Inspect queued requests</button>
+<textarea id="request" aria-label="Request JSON"></textarea><p id="queue_count">0 queued</p><div id="fixture_tasks" hidden></div>
+<script>
+var taskConfigSetup={taskConfig:{}};
+var queued=[];
+var SD={isServerAvailable:()=>true};
+function getPrompts(){return [document.querySelector('#prompt').value]}
+function getCurrentUserRequest(){return {seed:Number(seed.value),numOutputsTotal:1,batchCount:1,batchesDone:0,reqBody:{sampler_name:document.querySelector('#sampler_name').value,num_inference_steps:Number(document.querySelector('#num_inference_steps').value),seed:Number(seed.value),prompt:document.querySelector('#prompt').value,original_prompt:document.querySelector('#prompt').value,width:512,height:512,num_outputs:1}}}
+function restoreTaskToUI(task){
+    document.querySelector('#sampler_name').value=task.reqBody.sampler_name;
+    document.querySelector('#num_inference_steps').value=task.reqBody.num_inference_steps;
+    document.querySelector('#seed').value=task.reqBody.seed;
+    document.querySelector('#prompt').value=task.reqBody.original_prompt??task.reqBody.prompt;
+}
+function createTask(task){
+    const entry=document.createElement('div');entry.className='imageTaskContainer';entry.id='imageTaskContainer-'+Date.now();
+    task.outputContainer=document.createElement('div');entry.append(task.outputContainer);document.querySelector('#fixture_tasks').append(entry);
+    queued.push(task);document.querySelector('#queue_count').textContent=queued.length+' queued';
+}
+function completeFixture(){
+    for(const task of queued){
+        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="#496568"/><text x="12" y="64" fill="white">Fixture seed '+task.seed+'</text></svg>';
+        document.dispatchEvent(new CustomEvent('on_render_task_success',{detail:{task,reqBody:task.reqBody,stepUpdate:{output:[{data:'data:image/svg+xml;base64,'+btoa(svg),is_intermediate:false,intermediate_representation:'final',sampling_status:'complete'}]}}}));
+    }
+}
+function saveAs(blob,name){blob.text().then(text=>{document.querySelector('#request').value=text})}
+</script>
+<script src="/ui/plugins/ui/circuit-bend.plugin.js"></script>
+<script src="/ui/plugins/ui/circuit-bend-grid.plugin.js"></script>
+</body></html>

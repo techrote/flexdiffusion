@@ -1,0 +1,505 @@
+{
+  "schema": "flexdiffusion-step-gif/v1",
+  "source_evidence": "seed-bends-ddim-20261010",
+  "render": {
+    "name": "plms-independent-oscillate-seed3",
+    "request": {
+      "prompt": "A single humanoid dinosaur cyborg mercenary standing upright, two long robotic legs, two mechanical arms, armored torso, green scaly reptilian head and toothed snout. Holding a futuristic kinetic anti-materiel rifle in both clawed hands, long barrel and scope. Full-length centered character design, entire head and feet visible, neon city, science fiction illustration.",
+      "negative_prompt": "human face, human skin, man, woman, quadruped, multiple characters, duplicate bodies, crowd, helmet, mask, cropped head, cropped feet, close-up, extra limbs, text, watermark",
+      "seed": 3,
+      "width": 512,
+      "height": 512,
+      "num_outputs": 1,
+      "num_inference_steps": 16,
+      "guidance_scale": 10,
+      "init_image": null,
+      "control_image": null,
+      "sampler_name": "plms"
+    },
+    "circuit_bend": {
+      "enabled": true,
+      "mode": "plms_history",
+      "schedule": "exact",
+      "eta": 0.5,
+      "history_source": "seed",
+      "blend_target": "independent",
+      "donor_seed": 5,
+      "blend_curve": "oscillate",
+      "blend_start": 0,
+      "blend_end": 1,
+      "blend_period": 8,
+      "churn": 10.0,
+      "noise": 1.0,
+      "start": 1,
+      "end": null,
+      "window_unit": "iterations",
+      "every": 1,
+      "seed": 0,
+      "pattern": "fresh",
+      "memory": null,
+      "fade_in": 0,
+      "fade_out": 0,
+      "history_strength": 1
+    },
+    "sha256": "421e6536d1d19488814f2529785fa347b1dee3e904ba57ea0b1a56ff18348d9a",
+    "noise_seed": null,
+    "donor_seed": 5,
+    "repeat_all_steps_exact": null,
+    "step_sha256": [
+      "73277928d1a886192b4755669ffb082491d038869bc4c4339dd0282b27ed8a66",
+      "fdf3994b26623305f1020243de17492a31fd0e8522fc5e56eef68c60cd4f3c9d",
+      "ed2f69bf648e70ccf68203ded430fb54a756d3ea841a16d46a4e6415ac1139ba",
+      "f94b16e89ed915f1882a26af6f10e4f233e7bfc9acb0b83954b2a11c949fdc98",
+      "ce1b7278645d4af7f2a6aaa1157e774a0121bdf1a1467a57876ca94f28f2769a",
+      "3e1081e2eaa9433175cc08b41b98829ee84a3dc953c90a94bd452b6995bbc7c0",
+      "53091ab72a9d6079b29388b163cf47e3ed137813eb8095d3f32b34657da2ba4d",
+      "812c9a152ca102df23e34a0cb66d2ce9f6378a3a57af84b1e72fe2e9bee1153a",
+      "77a189152e9ebe12958483c5a0bb0790bb61f46e03ba0221dcf915afed87a270",
+      "514d252a3c1c6bdc6f5f2bb87972194bf2e2a366f7a61dd468b06920e48220d5",
+      "92890c42387eb76cdf71324a3aa71d3de421ad3cf0796312a75f2647402543f0",
+      "9903884e1d619b636001b601d737f439f04a7370cb7a286bf2cd136c08089de2",
+      "3f3d1ae3c75bdb64d58c488c24ecd93b389fe7374344be4d414dad5982b54f3a",
+      "6396f26c0a1a2f8cca2ef8c18739b8264efaeb170997fb810dd54da40ec51aed",
+      "48250c3938a5f9d6ba86edc4b0bbf27289da853fb4b6e5d022824eb609acf8a5",
+      "421e6536d1d19488814f2529785fa347b1dee3e904ba57ea0b1a56ff18348d9a"
+    ],
+    "observations": [
+      {
+        "step": 1,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 876.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.1464466094067262,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 2,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 813.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.49999999999999994,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 3,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 751.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.8535533905932737,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 4,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 688.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 1.0,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 5,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 626.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.8535533905932738,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 6,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 563.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.5000000000000001,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 7,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 501.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.14644660940672632,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 8,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 438.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_history",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.0,
+          "representation_label": "PLMS solver clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 9,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 376.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.14644660940672616,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 10,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 313.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.49999999999999983,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 11,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 251.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.8535533905932733,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 12,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 188.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 1.0,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 13,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 126.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.8535533905932735,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 14,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 63.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.5000000000000002,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 15,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 1.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "plms_trajectory_blend",
+          "donor_seed": 5,
+          "blend_target": "independent",
+          "blend_curve": "oscillate",
+          "blend_weight": 0.1464466094067267,
+          "representation_label": "Blended PLMS clean estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 16,
+        "representation": "final",
+        "metadata": {
+          "observation_phase": "final_return"
+        }
+      }
+    ],
+    "sampling_metadata": {
+      "sampler_name": "plms",
+      "requested_steps": 16,
+      "actual_steps": 16,
+      "completed_steps": 16,
+      "status": "complete",
+      "circuit_bend": {
+        "enabled": true,
+        "mode": "plms_history",
+        "schedule": "exact",
+        "eta": 0.5,
+        "history_source": "seed",
+        "blend_target": "independent",
+        "donor_seed": 5,
+        "blend_curve": "oscillate",
+        "blend_start": 0.0,
+        "blend_end": 1.0,
+        "blend_period": 8,
+        "churn": 10.0,
+        "noise": 1.0,
+        "start": 1.0,
+        "end": null,
+        "window_unit": "iterations",
+        "every": 1,
+        "seed": 0,
+        "pattern": "fresh",
+        "memory": null,
+        "fade_in": 0.0,
+        "fade_out": 0.0,
+        "history_strength": 1.0
+      },
+      "schedule": "exact",
+      "timesteps": [
+        1,
+        63,
+        126,
+        188,
+        251,
+        313,
+        376,
+        438,
+        501,
+        563,
+        626,
+        688,
+        751,
+        813,
+        876,
+        938
+      ]
+    }
+  },
+  "playback": {
+    "speed_slider": 8,
+    "continuous": true,
+    "endpoint_hold_ms": 1000,
+    "duration_ms": 5640,
+    "timeline": [
+      {
+        "step": 1,
+        "delay": 100
+      },
+      {
+        "step": 2,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 16,
+        "delay": 100
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 2,
+        "delay": 13
+      }
+    ]
+  },
+  "export": {
+    "file": "plms-independent-oscillate-seed3.gif",
+    "bytes": 3563341,
+    "sha256": "cce7bd730398ae8dbbfcfdf05ccc491f356a858e8a87d5f7af46b78fc03dd1bb",
+    "frames": 30,
+    "width": 512,
+    "height": 512,
+    "palette": "Existing viewer 256-colour per-frame palette",
+    "encoder": "Pillow LZW; decoded RGB and timing verified against viewer data"
+  }
+}

@@ -1,5 +1,9 @@
 # FlexDiffusion Trajectory Lab — Implementation Status
 
+The [10 October sampler report](SAMPLER_ART_PROGRESS_2026-10-10.md) records
+intermediate output, circuit bends, sampler interlacing, GIFs and validation.
+Hardware benchmarking is maintained separately from this sampler publication.
+
 ## Current branch state
 
 The SD1.x/classic trajectory work now has a usable experimental UI layer on top of the capture plumbing:
@@ -32,11 +36,16 @@ The bootstrap and artefact branches have passing lightweight CI. The artefact br
 - pure unit tests for schedules, config parsing, recorder state, writer commit, hashes and storage-budget failure;
 - lightweight GitHub Actions unit-test workflow;
 - upstream baseline/callback semantics recorded;
-- `Output After Step` for classic SD1.x txt2img fixed-step k-diffusion samplers;
+- `Output After Step` for classic SD1.x txt2img fixed-step k-diffusion, DDIM, PLMS and UniPC samplers;
 - deferred post-sampling VAE decode of selected intermediate observations into the normal output panel;
 - explicit per-image completed-step metadata;
 - selectable intermediate representation: `denoised`, `solver_state`, or `both`;
-- temporary callback bridge that preserves k-diffusion's original `denoised` callback value without changing sampler equations;
+- per-render native sampler adapters with phase and actual-step metadata;
+- Euler/Heun noise, PLMS frozen/donor history, DDIM eta and exact-count schedules;
+- PLMS/DDIM live-latent alternation and coupled exchange with shared/stale/reset history;
+- constant, progressive, oscillating and block seed-mixing options;
+- parameter grids, recipe import/export and bend-setting restore;
+- standalone all-step PNG viewer, ping-pong playback, speed control and GIF export;
 - representation-specific output labels and download filenames;
 - fixed explicit seed as the normal comparison default;
 - multi-sampler `Also run` UI that enqueues each selected sampler as a separate ordinary task with the same seed/settings;
@@ -64,7 +73,7 @@ For fixed-step k-diffusion samplers, callback index `N` observes the solver late
 
 Checkpoint previews and Output After Step observations are not final post-filtered Easy Diffusion outputs. Per-image face correction/upscaling remains final-only in the MVP.
 
-Normal generation still follows the upstream call path when `trajectory.enabled` is false and `Output After Step` equals the final inference step. No intermediate CPU snapshot is created in that default case.
+With capture and bending disabled, generation retains upstream integration math and creates no intermediate CPU snapshots. DDIM/PLMS/UniPC adapters also report actual native schedule counts for final-only requests.
 
 ## Not yet implemented / not yet validated
 
@@ -75,10 +84,10 @@ Normal generation still follows the upstream call path when `trajectory.enabled`
 - sampler sigma/timestep and multistep solver-state persistence in the trajectory manifest;
 - exact/approximate resume classification;
 - branch DAG persistence and lineage operations;
-- trajectory viewer/jog/scrub UI;
+- persisted-latent editing/resume UI (the exported PNG sequence viewer is implemented);
 - insert-edit operations and image/latent interventions;
 - GIMP/GEGL bridge;
-- Output After Step for DDIM/PLMS/adaptive samplers, img2img, or other Easy Diffusion engines;
+- Output After Step for adaptive samplers, Stability DPM Solver, img2img, or other Easy Diffusion engines;
 - other Easy Diffusion engines or K80 support.
 
 ## Next gates

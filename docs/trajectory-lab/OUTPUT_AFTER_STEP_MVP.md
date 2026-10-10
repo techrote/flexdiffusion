@@ -87,7 +87,7 @@ FlexDiffusion copies selected latent tensors to owned CPU memory during sampling
 
 ## Current sampler scope
 
-Sparse capture deliberately retains the same proven sampler scope as the earlier Output After Step MVP:
+Sparse capture supports these fixed-step k-diffusion samplers:
 
 - `euler`
 - `euler_a`
@@ -99,7 +99,10 @@ Sparse capture deliberately retains the same proven sampler scope as the earlier
 - `dpmpp_2m`
 - `dpmpp_sde`
 
-The current compatibility gate still rejects DDIM, PLMS, Stability DPM Solver, DPM Adaptive and the UniPC family while sparse/intermediate capture is active. Those sampler families need their callback/state semantics classified separately; this UI redesign does not claim support for them.
+DDIM, PLMS and all five UniPC presets now have family-specific observation adapters.
+Their estimate phases, native schedule counts and experimental limits are described
+in [Sampler intermediate output and experimental noise](SAMPLER_OUTPUT_AND_BENDS.md).
+Stability DPM Solver and DPM Adaptive remain outside the capture gate.
 
 ## Compatibility transport
 
