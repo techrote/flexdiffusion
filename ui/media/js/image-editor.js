@@ -140,10 +140,18 @@ const IMAGE_EDITOR_ACTIONS = [
                 reader.addEventListener("load", function (event) {
                     let maskData = reader.result
 
-                    editor.layers.drawing.ctx.clearRect(0, 0, editor.width, editor.height)
                     var image = new Image()
                     image.onload = () => {
-                        editor.layers.drawing.ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        const ctx = editor.layers.drawing.ctx
+                        ctx.save()
+                        ctx.globalCompositeOperation = "source-over"
+                        ctx.filter = "none"
+                        ctx.clearRect(0, 0, editor.width, editor.height)
+                        ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        ctx.restore()
+                        // Record the pixels after the asynchronous read, not a file
+                        // dialog action that undo/redo would attempt to replay.
+                        editor.history.pushRaster()
                     }
                     image.src = maskData
                 })
@@ -155,7 +163,25 @@ const IMAGE_EDITOR_ACTIONS = [
 
             el.click()
         },
-        trackHistory: true,
+        trackHistory: false,
+    },
+    {
+        id: "extract_alpha_mask",
+        name: "Extract PNG alpha mask",
+        icon: "fa-solid fa-layer-group",
+        title: "Transparent pixels become white (inpaint); opaque pixels become black (preserve).",
+        inpainterOnly: true,
+        handler: (editor) => editor.extractAlphaMask(),
+        trackHistory: false,
+    },
+    {
+        id: "invert_mask",
+        name: "Invert mask (black/white)",
+        icon: "fa-solid fa-circle-half-stroke",
+        title: "Swap the white (inpaint) and black (preserve) regions of the current mask.",
+        inpainterOnly: true,
+        handler: (editor) => editor.invertMask(),
+        trackHistory: false,
     },
     {
         id: "fill_all",
@@ -353,6 +379,14 @@ class EditorHistory {
             id: action,
         })
     }
+    pushRaster() {
+        // Store the completed pixels: extraction and inversion cannot be reproduced
+        // by replaying an asynchronous image load or the current input image.
+        this.push({
+            type: "raster",
+            pixels: this.editor.layers.drawing.ctx.getImageData(0, 0, this.editor.width, this.editor.height),
+        })
+    }
     editBegin(x, y) {
         this.current_edit = {
             type: "edit",
@@ -407,6 +441,8 @@ class EditorHistory {
             if (event.type == "action") {
                 var action = IMAGE_EDITOR_ACTIONS.find((a) => a.id == event.id)
                 action.handler(this.editor)
+            } else if (event.type == "raster") {
+                ctx.putImageData(event.pixels, 0, 0)
             } else if (event.type == "edit") {
                 var tool = IMAGE_EDITOR_TOOLS.find((t) => t.id == event.id)
                 this.editor.setBrush(this.editor.layers.drawing, event.options)
@@ -524,12 +560,15 @@ class ImageEditor {
         var actionsTitle = document.createElement("h4")
         actionsTitle.textContent = "Actions"
         actionsContainer.appendChild(actionsTitle)
-        IMAGE_EDITOR_ACTIONS.forEach((action) => {
+        IMAGE_EDITOR_ACTIONS.filter((action) => !action.inpainterOnly || this.inpainter).forEach((action) => {
             var element = document.createElement("div")
             var icon = document.createElement("i")
             element.className = "image-editor-button button"
             if (action.className) {
                 element.className += " " + action.className
+            }
+            if (action.title) {
+                element.title = action.title
             }
             icon.className = action.icon
             element.appendChild(icon)
@@ -621,6 +660,50 @@ class ImageEditor {
         }
         this.history.clear()
     }
+    applyMaskPixels(pixels) {
+        // Both extraction and inversion replace the entire mask and are one undo step.
+        const ctx = this.layers.drawing.ctx
+        const imageData = ctx.createImageData(this.width, this.height)
+        imageData.data.set(pixels)
+        ctx.clearRect(0, 0, this.width, this.height)
+        ctx.putImageData(imageData, 0, 0)
+        this.setBrush(this.layers.drawing)
+        this.history.pushRaster()
+    }
+    extractAlphaMask() {
+        if (!this.inpainter) return
+        if (!initImagePreview.complete || !initImagePreview.naturalWidth) {
+            showToast("Load a transparent PNG as the initial image first.", 5000, true)
+            return
+        }
+
+        // Sample the currently displayed img2img image at the actual output size.
+        // This also supports the core plugin's crop/resize and clipboard import path.
+        const canvas = document.createElement("canvas")
+        canvas.width = this.width
+        canvas.height = this.height
+        const ctx = canvas.getContext("2d", { willReadFrequently: true })
+        let converted
+        try {
+            ctx.drawImage(initImagePreview, 0, 0, this.width, this.height)
+            converted = alphaToInpaintingMaskPixels(ctx.getImageData(0, 0, this.width, this.height).data)
+        } catch (error) {
+            showToast("Unable to read the image alpha channel. Try loading a local PNG file.", 5000, true)
+            return
+        }
+
+        if (!converted.hasTransparency) {
+            showToast("The initial image is fully opaque; no transparent pixels were found.", 5000, true)
+            return
+        }
+
+        this.applyMaskPixels(converted.pixels)
+    }
+    invertMask() {
+        if (!this.inpainter) return
+        const pixels = this.layers.drawing.ctx.getImageData(0, 0, this.width, this.height).data
+        this.applyMaskPixels(invertInpaintingMaskPixels(pixels))
+    }
     saveImage() {
         if (!this.inpainter) {
             // This is not an inpainter, so save the image as the new img2img input
@@ -638,8 +721,21 @@ class ImageEditor {
         this.hide()
     }
     getImg() {
-        // a drop-in replacement of the drawingboard version
-        return this.layers.drawing.canvas.toDataURL()
+        if (!this.inpainter) {
+            return this.layers.drawing.canvas.toDataURL()
+        }
+
+        // The backend converts the PNG to RGB. Make grayscale mask values explicit,
+        // rather than relying on how it treats transparent RGBA overlay pixels.
+        const canvas = document.createElement("canvas")
+        canvas.width = this.width
+        canvas.height = this.height
+        const ctx = canvas.getContext("2d")
+        const mask = ctx.createImageData(this.width, this.height)
+        const overlay = this.layers.drawing.ctx.getImageData(0, 0, this.width, this.height)
+        mask.data.set(opaqueInpaintingMaskPixels(overlay.data))
+        ctx.putImageData(mask, 0, 0)
+        return canvas.toDataURL("image/png")
     }
     setImg(dataUrl) {
         // a drop-in replacement of the drawingboard version

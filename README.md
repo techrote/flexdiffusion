@@ -122,6 +122,9 @@ Just delete the `EasyDiffusion` folder to uninstall all the downloaded packages.
 # How to use?
 Please refer to our [guide](https://github.com/easydiffusion/easydiffusion/wiki/How-to-Use) to understand how to use the features in this UI.
 
+## Use a transparent PNG as an inpainting mask
+Load the PNG as the **Initial Image (img2img)**, click **Inpaint**, then choose **Extract PNG alpha mask** in the editor's Actions menu. Fully transparent pixels become white (inpaint); fully opaque pixels become black (preserve), and partial transparency creates grayscale edges. **Invert mask (black/white)** swaps these regions. You can refine the resulting mask with the drawing tools, then click **Save** to enable the mask for generation. The image must contain actual transparent pixels; an opaque PNG cannot provide a transparency mask.
+
 # Bugs reports and code contributions welcome
 If there are any problems or suggestions, please feel free to ask on the [discord server](https://discord.com/invite/u9yhsFmEkB) or [file an issue](https://github.com/easydiffusion/easydiffusion/issues).
 
