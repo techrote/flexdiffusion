@@ -239,7 +239,17 @@
             status.textContent = "The generator's image input is not available."
             return
         }
-        // Keep existing generator controls and batching; only supply its img2img image.
+        // Keep existing generator controls and batching; replace only the input
+        // image, not a previous inpainting selection from another source.
+        const maskToggle = document.getElementById("enable_mask")
+        if (maskToggle) {
+            maskToggle.checked = false
+            maskToggle.dispatchEvent(new Event("change"))
+        }
+        if (typeof imageInpainter !== "undefined") {
+            imageInpainter.layers.drawing.ctx.clearRect(0, 0, imageInpainter.width, imageInpainter.height)
+            imageInpainter.history.clear()
+        }
         init.src = canvas.toDataURL("image/png")
         if (typeof setImageWidthHeight === "function" &&
             typeof MAX_INIT_IMAGE_DIMENSION !== "undefined" &&
