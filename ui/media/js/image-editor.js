@@ -143,8 +143,12 @@ const IMAGE_EDITOR_ACTIONS = [
                     var image = new Image()
                     image.onload = () => {
                         const ctx = editor.layers.drawing.ctx
+                        ctx.save()
+                        ctx.globalCompositeOperation = "source-over"
+                        ctx.filter = "none"
                         ctx.clearRect(0, 0, editor.width, editor.height)
                         ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        ctx.restore()
                         // Record the pixels after the asynchronous read, not a file
                         // dialog action that undo/redo would attempt to replay.
                         editor.history.pushRaster()
