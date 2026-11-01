@@ -7,7 +7,7 @@
     text-align: left;
     padding: 12px;
 }
-#tab-content-main #circuit_bend_row {
+#tab-content-main #circuit_bend_row,\n#tab-content-main #bend_grid_row {
     display: none !important;
 }
 .generation-workspace-heading {
