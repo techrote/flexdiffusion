@@ -255,7 +255,7 @@
         root.__flexDiffusionReadCircuitBend = () => available() && field("enabled").checked ? read() : null
         getCurrentUserRequest = function (...args) {
             const task = originalRequest.apply(this, args)
-            if (available() && field("enabled").checked) task.reqBody.circuit_bend = read()
+            if (available() && field("enabled").checked && root.__flexDiffusionGenerationWorkspace !== "vanilla") task.reqBody.circuit_bend = read()
             else delete task.reqBody.circuit_bend
             return task
         }

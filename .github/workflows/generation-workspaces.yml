@@ -1,0 +1,38 @@
+name: Generation workspace / RGB compositor checks
+
+on:
+  pull_request:
+    branches:
+      - codex/sampler-art-progress
+  push:
+    branches:
+      - feat/generation-workspaces-compositor
+
+permissions:
+  contents: read
+
+jobs:
+  composition-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax-check new UI and existing sampler UI integration
+        run: |
+          node --check ui/media/js/compositor.js
+          node --check ui/media/js/composition-lab.js
+          node --check ui/media/js/generation-workspaces.js
+          node --check ui/plugins/ui/circuit-bend.plugin.js
+          node --check tests/test_compositor.js
+          node --check tests/test_generation_workspaces.js
+      - name: Test RGB composition modes and masked opacity
+        run: node tests/test_compositor.js
+      - name: Test generator workspace routing and vanilla isolation
+        run: node tests/test_generation_workspaces.js
+      - name: Existing circuit-bend UI regression
+        run: node tests/test_circuit_bend_ui.js
+      - name: Existing step-viewer regression
+        run: node tests/test_step_viewer.js

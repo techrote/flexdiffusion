@@ -1,0 +1,64 @@
+/* Generator workspaces share the original form and task queue.
+ * Never duplicate the core editor's IDs or event listeners.
+ */
+#tab-content-sampler-lab > .tab-content-inner,
+#tab-content-blend-lab > .tab-content-inner {
+    max-width: none;
+    text-align: left;
+    padding: 12px;
+}
+#tab-content-main #circuit_bend_row,\n#tab-content-main #bend_grid_row {
+    display: none !important;
+}
+.generation-workspace-heading {
+    margin: 4px 12px 12px;
+    text-align: left;
+}
+.generation-workspace-heading h2 { margin: 0 0 6px; }
+.generation-workspace-heading p { margin: 0 0 4px; }
+.generation-workspace-form {
+    display: flex;
+    width: 100%;
+}
+.generation-workspace-form > #preview {
+    flex: 1;
+    min-width: 0;
+}
+.blend-lab-header { margin: 0 0 16px; }
+.blend-lab-header h2 { margin: 0 0 8px; }
+.blend-lab-header p { margin: 0 0 8px; }
+.blend-lab-note { opacity: .85; font-size: .9em; }
+.blend-lab-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 350px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+.blend-lab-panel, .blend-lab-output {
+    padding: 14px;
+    border: 1px solid var(--background-color3);
+    background: var(--background-color2);
+    border-radius: 7px;
+    min-width: 0;
+}
+.blend-lab-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.blend-lab-field > label { font-weight: 600; }
+.blend-lab-field select, .blend-lab-field input[type="file"] { max-width: 100%; }
+.blend-lab-field small, .blend-lab-output small { opacity: .85; }
+.blend-lab-inline { display: block; margin-top: 8px; font-weight: 400 !important; }
+.blend-lab-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.blend-lab-actions button, #blend-lab-clear-map { min-height: 32px; cursor: pointer; }
+.blend-lab-actions button:disabled { cursor: not-allowed; opacity: .5; }
+.blend-lab-output canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    background: repeating-conic-gradient(#d5d5d5 0% 25%, #f4f4f4 0% 50%) 50% / 16px 16px;
+    image-rendering: auto;
+    margin-bottom: 8px;
+}
+#blend-lab-status { min-height: 2em; font-size: .9em; }
+@media (max-width: 850px) {
+    .generation-workspace-form { flex-direction: column; }
+    .blend-lab-grid { grid-template-columns: minmax(0, 1fr); }
+}
