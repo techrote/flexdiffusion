@@ -140,10 +140,14 @@ const IMAGE_EDITOR_ACTIONS = [
                 reader.addEventListener("load", function (event) {
                     let maskData = reader.result
 
-                    editor.layers.drawing.ctx.clearRect(0, 0, editor.width, editor.height)
                     var image = new Image()
                     image.onload = () => {
-                        editor.layers.drawing.ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        const ctx = editor.layers.drawing.ctx
+                        ctx.clearRect(0, 0, editor.width, editor.height)
+                        ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        // Record the pixels after the asynchronous read, not a file
+                        // dialog action that undo/redo would attempt to replay.
+                        editor.history.pushRaster()
                     }
                     image.src = maskData
                 })
@@ -155,7 +159,7 @@ const IMAGE_EDITOR_ACTIONS = [
 
             el.click()
         },
-        trackHistory: true,
+        trackHistory: false,
     },
     {
         id: "extract_alpha_mask",
