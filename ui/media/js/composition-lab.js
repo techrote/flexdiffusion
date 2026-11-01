@@ -62,6 +62,11 @@
             </div>
         `,
     })
+    // Keep research tabs adjacent to Generate, ahead of settings/help.
+    const tabSettings = document.getElementById("tab-settings")
+    const labTab = document.getElementById("tab-blend-lab")
+    if (tabSettings && labTab) tabSettings.before(labTab)
+
     const q = (name) => document.getElementById("blend-lab-" + name)
     const mode = q("mode")
     const modeGroups = [
@@ -134,6 +139,7 @@
         const base = state.bottom
         const upper = state.top
         if (!base || !upper) {
+            canvas.width = canvas.height = 0
             invalidate("Choose images A and B to compose.")
             return
         }
@@ -204,7 +210,7 @@
     })
 
     for (const key of ["mode", "opacity", "mask-channel", "invert"]) {
-        q(key).addEventListener(key === "opacity" ? "change" : "change", recompose)
+        q(key).addEventListener("change", recompose)
     }
     q("opacity").addEventListener("input", () => {
         q("opacity-label").textContent = q("opacity").value + "%"
@@ -235,10 +241,11 @@
         }
         // Keep existing generator controls and batching; only supply its img2img image.
         init.src = canvas.toDataURL("image/png")
-        if (typeof setImageWidthHeight === "function") {
+        if (typeof setImageWidthHeight === "function" &&
+            typeof MAX_INIT_IMAGE_DIMENSION !== "undefined" &&
+            canvas.width <= MAX_INIT_IMAGE_DIMENSION && canvas.height <= MAX_INIT_IMAGE_DIMENSION) {
             setImageWidthHeight(canvas.width, canvas.height)
         }
-        selectTab("tab-main")
         document.getElementById("tab-main").click()
         status.textContent = "Composition loaded as the initial image. Adjust generation settings as needed."
     })
