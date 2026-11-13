@@ -30,9 +30,12 @@ stacked on `codex/sampler-art-progress`, not directly on `main`.
 
 B and the map are smoothly resampled to A's size. This is useful for
 comparing iteration checkpoints, but checkpoint frames are not exact
-solver-resumption states. Exceeding ~8.39 million source pixels is refused rather
-than potentially hanging the browser. Very large exported PNGs are not
-automatically applied as the generator's render dimensions.
+solver-resumption states. Any decoded input (A, B **or** coverage map) above ~8.39 million pixels is
+rejected before it is rasterized, even when B or the map would otherwise be
+resampled to a small A. Large exported PNGs are not automatically applied as
+the generator's render dimensions. Tiny thumbnails below the generator's
+64-pixel dimension step are likewise handed off without overriding valid
+generation dimensions (the main UI rounds dimensions to 64-pixel multiples).
 
 ## Supported GIMP-inspired RGB operations
 
@@ -94,13 +97,20 @@ VAE reconstruction drift, cost, and endpoint equivalence.
 
 ```
 node tests/test_compositor.js
+node tests/test_blend_lab_ui.js
 node tests/test_generation_workspaces.js
+node tests/test_blend_lab_browser.cjs    # requires Chrome/Chromium
 node tests/test_circuit_bend_ui.js
 node tests/test_step_viewer.js
 ```
 
-A single GitHub-hosted Node CI lane covers the new UI contract, mode maths,
-and two existing sampler/plugin regressions. A separate physical browser run
-should verify the images, mask resampling, PNG export, img2img handoff, preview
-movement between workspaces, and the exact request payloads for ordinary
-versus experimental Generate. No native masked diffusion test is claimed.
+A single GitHub-hosted CI lane now executes the mode maths, an event-driven
+Blend Lab UI fixture, workspace routing, sampler/plugin regressions and a
+**real headless Chromium** run loading the actual scripts and styles. The
+browser fixture uses genuine decoded PNG files, canvas blending, workspace
+reparenting, mask inversion, export and img2img handoff. It does **not** start
+the full Easy Diffusion backend or claim a GPU generation. A separate physical
+Windows/Firefox app run must validate end-to-end queueing, persisted UI settings,
+mask resampling/export and the submitted vanilla versus sampler request payload.
+PR #8 and its own trajectory-artifact predecessors must qualify independently.
+No native spatially masked diffusion sampler or GEGL pixel-parity test is claimed.
