@@ -11,14 +11,29 @@ permissions:
 
 jobs:
   classic-samplers:
-    name: Real sdkit solvers (CPU)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Real sdkit solvers (CPU · ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows has the same real native import/test contract, not a syntax-only gate.
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           # PR event github.sha is a synthetic test merge, not the owned PR head.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Require exact PR head checkout
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "SOURCE_HEAD=$actual"
+          test "$actual" = "$EXPECTED_HEAD"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
