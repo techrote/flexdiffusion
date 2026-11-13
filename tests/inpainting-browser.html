@@ -73,6 +73,7 @@ function img2imgUnload() {}
     check(!vanillaActions.includes("Extract PNG alpha mask") && !vanillaActions.includes("Invert mask"), "inpainting actions leaked to ordinary editor")
     check(inpaintActions.includes("Extract PNG alpha mask") && inpaintActions.includes("Invert mask"), "inpainting actions absent")
     check(getComputedStyle(imageInpainter.layers.drawing.canvas).opacity === "0.6", "inpainting preview visual opacity missing")
+    check(imageInpainter.options.opacity === 0, "default inpainting brush must paint full coverage")
     imageInpainter.runAction("extract_alpha_mask")
     // Canvas PNG decode can round antialiased alpha by one byte across
     // Chrome graphics backends; the endpoints and undo pixels stay exact.
