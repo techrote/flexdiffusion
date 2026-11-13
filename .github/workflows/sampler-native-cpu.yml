@@ -48,7 +48,7 @@ jobs:
             "fastapi==0.115.6" "uvicorn==0.19.0" "rich==12.6.0" \
             "wandb==0.17.2" "ruamel.yaml==0.17.21" \
             "sqlalchemy==2.0.19" "python-multipart==0.0.6" \
-            "picklescan" "pycloudflared==0.2.0"
+            "picklescan" "pycloudflared==0.2.0" "httpx==0.27.2"
       - name: Fail closed if real native solvers cannot import
         run: |
           python - <<'PY'
@@ -70,7 +70,8 @@ jobs:
         run: |
           PYTHONPATH=tests python -m unittest -v \
             test_trajectory_sampler_adapters.NativeSamplerTests \
-            test_trajectory_circuit_bend.BendNumericsTests
+            test_trajectory_circuit_bend.BendNumericsTests \
+            test_sampler_http.RenderHttpContractTests
       - name: Capture source identifier
         if: always()
         run: |
