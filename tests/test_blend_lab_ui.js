@@ -181,7 +181,7 @@ async function run() {
     assert.equal(maskChanges, 1, "mask change event triggered")
     assert.equal(clearedMask, 1, "old mask strokes removed")
     assert.equal(clearedHistory, 1, "old mask history removed")
-    assert.deepEqual(dimensions, [1, 1], "valid handoff dimensions applied")
+    assert.equal(dimensions, null, "tiny thumbnail must not round generator dimensions to zero")
     assert.match(get("init_image_preview").src, /^data:image\/png;base64,/)
     assert.equal(get("tab-main").clicked, 1, "return to Generate tab")
 
@@ -206,6 +206,13 @@ async function run() {
     stale.release()
     await pending
     assert.deepEqual([...q("canvas").pixels], [44, 55, 66, 255], "last selection wins")
+    // Native image dimensions are applied when both sides can survive the
+    // generator's 64-pixel quantization (main.js: roundToMultiple).
+    const mediumPixels = new Uint8ClampedArray(64 * 64 * 4).fill(255)
+    await select("bottom", file("medium-A.png", mediumPixels, 64, 64))
+    await select("top", file("medium-B.png", mediumPixels, 64, 64))
+    await q("use-init").emit("click")
+    assert.deepEqual(dimensions, [64, 64], "supported input dimensions automatically applied")
     assert.equal(objectUrls.size, 1, "only the delayed PNG download URL remains")
     assert.equal([...objectUrls.values()][0].kind, "png", "all image decode URLs revoked")
     console.log("Blend Lab UI: image decode, all tab controls, masks, export, img2img, size guards, stale async decode passed")
