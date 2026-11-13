@@ -101,5 +101,88 @@ class RenderHttpContractTests(unittest.TestCase):
                 self.assertEqual(queued, [])
 
 
+    def test_http_enqueue_worker_pipeline_and_streamed_sampler_result(self):
+        """Exercise /render -> RenderTask.run -> /image/stream without model weights.
+
+        The actual API, request objects, worker pipeline and result serializer
+        run unmodified. Only the model loader and sampler kernel are replaced;
+        numerical correctness is covered separately by the real-native tests.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from easydiffusion import backend_manager, model_manager, runtime, task_manager
+
+        payload = {
+            "session_id": "sampler-worker-http",
+            "prompt": "model-free worker smoke",
+            "use_stable_diffusion_model": "sd-v1-4",
+            "sampler_name": "plms", "num_inference_steps": 8,
+            "output_after_step": 4, "seed": 2,
+            "circuit_bend": {
+                "enabled": True, "mode": "sampler_mix",
+                "mix_method": "alternate", "mix_history": "independent",
+                "mix_block": 2, "seed": 123, "schedule": "exact",
+            },
+        }
+        response, queued = self.post_render(payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(queued), 1)
+        task = queued[0]
+        self.assertEqual(response.json()["stream"], f"/image/stream/{task.id}")
+
+        invoked = {}
+        context = SimpleNamespace(
+            test_diffusers=False, output_step_results=[],
+            sampling_metadata={}, output_step_warnings=[],
+        )
+
+        def fake_sampler(context, callback, output_type, **kwargs):
+            invoked.update(kwargs)
+            self.assertEqual(output_type, "base64")
+            callback(None, 1, {"actual_steps": 8})
+            context.sampling_metadata = {
+                "actual_steps": 8, "completed_steps": 8, "status": "complete",
+            }
+            # Encoded 1x1 PNG; no external checkpoint or GPU is accessed.
+            return ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9yKlTUwAAAAASUVORK5CYII="]
+
+        backend = SimpleNamespace(
+            ed_info={"capabilities": {
+                "circuit_bend": True, "output_after_step": True,
+                "trajectory_capture": True,
+            }},
+            set_options=Mock(), generate_images=fake_sampler,
+        )
+        with patch.object(runtime, "context", context), \
+             patch.object(runtime, "set_vram_optimizations", return_value=False), \
+             patch.object(model_manager, "resolve_model_paths"), \
+             patch.object(model_manager, "reload_models_if_necessary"), \
+             patch.object(model_manager, "fail_if_models_did_not_load"), \
+             patch.object(backend_manager, "backend", backend), \
+             patch.object(task_manager, "keep_task_alive"), \
+             patch.object(self.server.app, "getConfig", return_value={}):
+            task.run()
+
+        self.assertEqual(invoked["sampler_name"], "plms")
+        self.assertEqual(invoked["output_after_step"], 4)
+        self.assertEqual(invoked["circuit_bend"]["mix_history"], "independent")
+        self.assertEqual(invoked["circuit_bend"]["seed"], 123)
+        self.assertEqual(task.response["sampling_metadata"]["completed_steps"], 8)
+
+        with patch.object(task_manager, "get_cached_task", return_value=task):
+            streamed = self.client.get(response.json()["stream"])
+            self.assertEqual(streamed.status_code, 200, streamed.text)
+            self.assertIn('"step": 1', streamed.text)
+            self.assertIn('"sampling_metadata"', streamed.text)
+
+            cached = self.client.get(response.json()["stream"])
+            self.assertEqual(cached.status_code, 200, cached.text)
+            result = cached.json()
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(result["output"][0]["seed"], 2)
+            self.assertEqual(result["sampling_metadata"]["status"], "complete")
+            self.assertEqual(result["render_request"]["circuit_bend"]["mix_block"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
