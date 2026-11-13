@@ -15,6 +15,7 @@ const files = [
     "ui/media/js/compositor.js",
     "ui/media/js/generation-workspaces.js",
     "ui/media/js/composition-lab.js",
+    "ui/plugins/ui/circuit-bend.plugin.js",
 ]
 const resources = files.map(file => '<script src="' + pathToFileURL(path.join(repo, file)).href + '"><\/script>').join("\n")
 const css = pathToFileURL(path.join(repo, "ui/media/css/generation-workspaces.css")).href
@@ -35,6 +36,9 @@ const imageInpainter = {
 }
 const MAX_INIT_IMAGE_DIMENSION = 768
 function setImageWidthHeight(w, h) { window.browserTest.dimensions = [w, h] }
+function getCurrentUserRequest() {
+    return { reqBody: { prompt: "test", seed: 2, circuit_bend: { stale: true } }, batchCount: 1 }
+}
 function createTab(request) {
     const tab = document.createElement("button")
     tab.id = "tab-" + request.id
@@ -89,11 +93,20 @@ const smoke = String.raw`
     const queue = document.getElementById("task-queue-marker")
     assert(window.__flexDiffusionGenerationWorkspace === "vanilla", "initial Generate mode")
     assert(getComputedStyle(document.getElementById("bend_grid_row")).display === "none", "experiment grid leaked in vanilla CSS")
+    assert(getComputedStyle(document.getElementById("circuit_bend_row")).display === "none", "circuit bend controls leaked in vanilla CSS")
+    const bendToggle = document.getElementById("circuit_bend_enabled")
+    assert(bendToggle, "real sampler plugin failed to initialize")
+    bendToggle.checked = true
+    bendToggle.dispatchEvent(new Event("change"))
+    assert(!("circuit_bend" in getCurrentUserRequest().reqBody), "vanilla request leaked circuit bend payload")
     document.getElementById("tab-sampler-lab").click()
     assert(window.__flexDiffusionGenerationWorkspace === "sampler", "sampler mode not selected")
+    const experimental = getCurrentUserRequest()
+    assert(experimental.reqBody.circuit_bend && experimental.reqBody.circuit_bend.enabled, "sampler request omitted circuit bend payload")
     assert(pA.parentElement.id === "generation-sampler-form" && pB.parentElement.id === "generation-sampler-form", "editor and preview not moved")
     document.getElementById("tab-main").click()
     assert(window.__flexDiffusionGenerationWorkspace === "vanilla", "vanilla mode not restored")
+    assert(!("circuit_bend" in getCurrentUserRequest().reqBody), "vanilla request retained sampler payload after switching")
     assert(pA.parentElement.id === "tab-content-main" && pB.parentElement.id === "tab-content-main", "original editor identity lost")
     assert(document.getElementById("task-queue-marker") === queue, "queue element replaced")
 
@@ -132,7 +145,14 @@ const smoke = String.raw`
 const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="${css}"></head>
 <body>
 <div id="tab-content-main">
-  <div id="editor"><div id="bend_grid_row">grid</div><div id="circuit_bend_row">circuit</div></div>
+  <div id="editor">
+    <div id="bend_grid_row">grid</div>
+    <table><tbody><tr><td><select id="sampler_name">
+      <option value="euler">Euler</option><option value="plms" selected>PLMS</option>
+      <option value="ddim">DDIM</option></select></td></tr>
+      <tr><td><input id="num_inference_steps" type="number" value="20"></td></tr>
+    </tbody></table>
+  </div>
   <div id="preview"><div id="task-queue-marker">queue</div></div>
 </div>
 <button id="tab-main">Generate</button><button id="tab-settings">Settings</button>
@@ -166,7 +186,7 @@ try {
         console.error("stderr (tail):", (run.stderr || "").slice(-1200))
         process.exitCode = 1
     } else {
-        console.log("Real Chromium: workspace DOM identity, vanilla CSS isolation, decoded PNGs, mask inversion, export and img2img handoff PASS")
+        console.log("Real Chromium: workspace DOM identity, vanilla/sampler request isolation via live plugin, canvas PNG masks, export and img2img handoff PASS")
     }
 } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
