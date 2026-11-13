@@ -1,0 +1,184 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Inpainting editor browser regression</title>
+<link rel="stylesheet" href="../ui/media/css/image-editor.css">
+<style>
+.editor-controls-left,.editor-controls-right{width:140px}
+.editor-controls-center{width:500px}
+</style>
+<pre id="result">RUNNING</pre>
+<div id="image-editor">
+    <div class="editor-controls-left"></div>
+    <div class="editor-controls-center"><div></div></div>
+    <div class="editor-controls-right"></div>
+</div>
+<div id="image-inpainter">
+    <div class="editor-controls-left"></div>
+    <div class="editor-controls-center"><div></div></div>
+    <div class="editor-controls-right"></div>
+</div>
+<div id="image-editor-controls-left"></div>
+<button id="init_image_button_draw">Draw</button>
+<button id="init_image_button_inpaint">Inpaint</button>
+<script>
+"use strict"
+var initImagePreview = document.createElement("img")
+var maskSetting = document.createElement("input")
+maskSetting.type = "checkbox"
+var toasts = []
+function showToast(message) { toasts.push(message) }
+function img2imgUnload() {}
+</script>
+<script src="../ui/media/js/inpainting-mask.js"></script>
+<script src="../ui/media/js/image-editor.js"></script>
+<script>
+(async function () {
+    const report = document.getElementById("result")
+    let passed = 0
+    function check(condition, message) {
+        if (!condition) throw new Error(message)
+        passed++
+    }
+    function equal(a, b, message) {
+        check(JSON.stringify(a) === JSON.stringify(b), message + ": " + JSON.stringify(a) + " != " + JSON.stringify(b))
+    }
+    function sourceImage(channels, width, height) {
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext("2d")
+        const data = ctx.createImageData(width, height)
+        data.data.set(channels)
+        ctx.putImageData(data, 0, 0)
+        return canvas.toDataURL("image/png")
+    }
+    async function readImage(uri) {
+        const image = new Image()
+        image.src = uri
+        await image.decode()
+        const canvas = document.createElement("canvas")
+        canvas.width = image.naturalWidth
+        canvas.height = image.naturalHeight
+        const ctx = canvas.getContext("2d", {willReadFrequently: true})
+        ctx.drawImage(image, 0, 0)
+        return {width: canvas.width, height: canvas.height, pixels: [...ctx.getImageData(0, 0, canvas.width, canvas.height).data]}
+    }
+    const values = (image) => image.pixels.filter((_, i) => i % 4 === 0)
+    const initial = sourceImage([255, 0, 0, 255, 200, 100, 0, 128, 0, 0, 0, 0], 3, 1)
+    initImagePreview.src = initial
+    await initImagePreview.decode()
+    imageInpainter.setImage(initial, 3, 1)
+    const vanillaActions = document.querySelector("#image-editor .editor-controls-right").textContent
+    const inpaintActions = document.querySelector("#image-inpainter .editor-controls-right").textContent
+    check(!vanillaActions.includes("Extract PNG alpha mask") && !vanillaActions.includes("Invert mask"), "inpainting actions leaked to ordinary editor")
+    check(inpaintActions.includes("Extract PNG alpha mask") && inpaintActions.includes("Invert mask"), "inpainting actions absent")
+    check(getComputedStyle(imageInpainter.layers.drawing.canvas).opacity === "0.6", "inpainting preview visual opacity missing")
+    check(imageInpainter.options.opacity === 0, "default inpainting brush must paint full coverage")
+    imageInpainter.runAction("extract_alpha_mask")
+    // Canvas PNG decode can round antialiased alpha by one byte across
+    // Chrome graphics backends; the endpoints and undo pixels stay exact.
+    const expected = values(await readImage(imageInpainter.getImg()))
+    check(expected[0] === 0 && Math.abs(expected[1] - 127) <= 1 && expected[2] === 255, "extracted mask coverage differs")
+    imageInpainter.runAction("invert_mask")
+    const inverted = values(await readImage(imageInpainter.getImg()))
+    check(inverted[0] === 255 && Math.abs(inverted[1] - 128) <= 1 && inverted[2] === 0, "inversion differs")
+    imageInpainter.history.undo()
+    equal(values(await readImage(imageInpainter.getImg())), expected, "undo inversion differs")
+    imageInpainter.history.undo()
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0], "undo extraction did not restore blank baseline")
+    imageInpainter.history.redo()
+    imageInpainter.history.redo()
+    equal(values(await readImage(imageInpainter.getImg())), inverted, "redo did not restore inversion")
+    // Fully opaque image must not alter any existing mask or its undo history.
+    const opaque = sourceImage([12, 12, 12, 255, 3, 3, 3, 255, 200, 200, 200, 255], 3, 1)
+    initImagePreview.src = opaque
+    await initImagePreview.decode()
+    const previous = (await readImage(imageInpainter.getImg())).pixels
+    const historyLength = imageInpainter.history.events.length
+    imageInpainter.runAction("extract_alpha_mask")
+    equal((await readImage(imageInpainter.getImg())).pixels, previous, "opaque input destroyed mask")
+    check(imageInpainter.history.events.length === historyLength, "opaque extraction added history")
+    check(toasts.some((s) => s.includes("fully opaque")), "opaque source did not explain failure")
+    // Backend PNG is opaque grayscale, never a colored or semi-transparent overlay.
+    imageInpainter.applyMaskPixels(Uint8ClampedArray.from([255, 0, 0, 153, 0, 255, 0, 153, 0, 0, 255, 153]))
+    const coloredExport = await readImage(imageInpainter.getImg())
+    equal(values(coloredExport), [46, 90, 17], "painted RGB was not grayscale on export")
+    equal(coloredExport.pixels.filter((_, i) => i % 4 === 3), [255, 255, 255], "export is not opaque")
+    // setImg is a baseline restore, not a history edit; dark mask pixels remain visually transparent.
+    const saved = imageInpainter.getImg()
+    imageInpainter.setImg(saved)
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    check(imageInpainter.history.events.length === 0, "setImg incorrectly retained or added history")
+    check(imageInpainter.layers.drawing.ctx.getImageData(0, 0, 1, 1).data[3] > 0, "saved nonzero mask not visible")
+    equal(values(await readImage(imageInpainter.getImg())), [46, 90, 17], "persisted mask lost grayscale values")
+    // The lowest grayscale values must not disappear from PNG premultiplication.
+    const subtleMask = sourceImage([1, 1, 1, 255, 8, 8, 8, 255, 29, 29, 29, 255], 3, 1)
+    imageInpainter.setImg(subtleMask)
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    equal(values(await readImage(imageInpainter.getImg())), [1, 8, 29], "low coverage rounded away during PNG reimport")
+    imageInpainter.setImg(saved)
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    // True local PNG mask import through the actual FileReader and Image callbacks.
+    const fileData = sourceImage([255, 255, 255, 255, 128, 128, 128, 255, 0, 0, 0, 255], 3, 1)
+    const nativeCreate = document.createElement.bind(document)
+    let picker
+    document.createElement = function (tag) {
+        const element = nativeCreate(tag)
+        if (tag.toLowerCase() === "input") {
+            picker = element
+            element.click = function () {} // no OS file chooser in headless regression
+        }
+        return element
+    }
+    imageInpainter.runAction("load_mask")
+    document.createElement = nativeCreate
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([await (await fetch(fileData)).blob()], "mask.png", {type: "image/png"}))
+    picker.files = transfer.files
+    picker.dispatchEvent(new Event("change"))
+    await new Promise((resolve) => setTimeout(resolve, 160))
+    equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "async file mask load")
+    imageInpainter.history.undo()
+    equal(values(await readImage(imageInpainter.getImg())), [46, 90, 17], "undo async file mask load")
+    imageInpainter.history.redo()
+    equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "redo async file mask load")
+    // Clear must affect the inpainting editor, never the separate normal editor.
+    imageEditor.setSize(3, 1)
+    imageEditor.applyMaskPixels(Uint8ClampedArray.from([30, 50, 100, 255, 30, 50, 100, 255, 30, 50, 100, 255]))
+    imageInpainter.runAction("clear")
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0], "clear did not clear the inpainting mask")
+    check(imageEditor.layers.drawing.ctx.getImageData(0, 0, 1, 1).data[3] === 255, "inpaint Clear erased ordinary editor")
+    imageInpainter.history.undo()
+    equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "undo of inpaint Clear lost prior mask")
+    // Start an asynchronous file load, then resize immediately. The stale
+    // callback must be ignored rather than overwriting the newly sized mask.
+    initImagePreview.src = initial
+    await initImagePreview.decode()
+    document.createElement = function (tag) {
+        const element = nativeCreate(tag)
+        if (tag.toLowerCase() === "input") {
+            picker = element
+            element.click = function () {}
+        }
+        return element
+    }
+    imageInpainter.runAction("load_mask")
+    document.createElement = nativeCreate
+    picker.files = transfer.files
+    picker.dispatchEvent(new Event("change"))
+    imageInpainter.setImage(initial, 4, 1)
+    await new Promise((resolve) => setTimeout(resolve, 180))
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0, 0], "stale file import overwrote resized mask")
+    check(imageInpainter.history.events.length === 0, "stale file import polluted history")
+    imageInpainter.runAction("extract_alpha_mask")
+    const scaled = values(await readImage(imageInpainter.getImg()))
+    check(scaled.length === 4 && scaled[0] === 0 && scaled[3] === 255, "RGBA resampling not aligned to editor dimensions")
+    const toastsBeforeAbsentMask = toasts.length
+    imageInpainter.setImg(undefined)
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0, 0], "missing task mask did not clear the previous mask")
+    check(imageInpainter.history.events.length === 0 && toasts.length === toastsBeforeAbsentMask, "missing task mask retained history or showed an error")
+    report.textContent = "PASS: " + passed + " browser assertions"
+})().catch((error) => {
+    document.getElementById("result").textContent = "FAIL: " + (error.stack || error)
+})
+</script>

@@ -127,35 +127,69 @@ const IMAGE_EDITOR_ACTIONS = [
         className: "load_mask",
         icon: "fa-regular fa-folder-open",
         handler: (editor) => {
-            let el = document.createElement("input")
-            el.setAttribute("type", "file")
-            el.addEventListener("change", function () {
-                if (this.files.length === 0) {
-                    return
-                }
+            const picker = document.createElement("input")
+            picker.setAttribute("type", "file")
+            picker.setAttribute("accept", "image/*")
+            picker.addEventListener("change", function () {
+                if (!this.files || this.files.length === 0) return
 
-                let reader = new FileReader()
-                let file = this.files[0]
-
-                reader.addEventListener("load", function (event) {
-                    let maskData = reader.result
-
-                    editor.layers.drawing.ctx.clearRect(0, 0, editor.width, editor.height)
-                    var image = new Image()
+                // The last user action wins. Do not let an old FileReader/Image
+                // callback overwrite a new mask, resize, undo or closed editor.
+                const revision = editor.cancelPendingMaskLoad()
+                const width = editor.width
+                const height = editor.height
+                const reader = new FileReader()
+                reader.addEventListener("load", () => {
+                    const image = new Image()
                     image.onload = () => {
-                        editor.layers.drawing.ctx.drawImage(image, 0, 0, editor.width, editor.height)
+                        if (revision !== editor.maskLoadRevision || width !== editor.width || height !== editor.height) return
+                        try {
+                            const canvas = document.createElement("canvas")
+                            canvas.width = width
+                            canvas.height = height
+                            const ctx = canvas.getContext("2d", { willReadFrequently: true })
+                            ctx.drawImage(image, 0, 0, width, height)
+                            const pixels = ctx.getImageData(0, 0, width, height).data
+                            if (editor.inpainter) {
+                                editor.applyMaskPixels(importInpaintingMaskPixels(pixels))
+                            } else {
+                                editor.applyMaskPixels(pixels)
+                            }
+                        } catch (error) {
+                            showToast("Unable to load the selected mask image.", 5000, true)
+                        }
                     }
-                    image.src = maskData
+                    image.onerror = () => {
+                        if (revision === editor.maskLoadRevision) showToast("The selected file is not a readable image.", 5000, true)
+                    }
+                    image.src = reader.result
                 })
-
-                if (file) {
-                    reader.readAsDataURL(file)
-                }
+                reader.addEventListener("error", () => {
+                    if (revision === editor.maskLoadRevision) showToast("Unable to read the selected mask file.", 5000, true)
+                })
+                reader.readAsDataURL(this.files[0])
             })
-
-            el.click()
+            picker.click()
         },
-        trackHistory: true,
+        trackHistory: false,
+    },
+    {
+        id: "extract_alpha_mask",
+        name: "Extract PNG alpha mask",
+        icon: "fa-solid fa-layer-group",
+        title: "Transparent pixels become white (inpaint); opaque pixels become black (preserve).",
+        inpainterOnly: true,
+        handler: (editor) => editor.extractAlphaMask(),
+        trackHistory: false,
+    },
+    {
+        id: "invert_mask",
+        name: "Invert mask (black/white)",
+        icon: "fa-solid fa-circle-half-stroke",
+        title: "Swap the white (inpaint) and black (preserve) regions of the current mask.",
+        inpainterOnly: true,
+        handler: (editor) => editor.invertMask(),
+        trackHistory: false,
     },
     {
         id: "fill_all",
@@ -175,7 +209,7 @@ const IMAGE_EDITOR_ACTIONS = [
         icon: "fa-solid fa-xmark",
         handler: (editor) => {
             editor.ctx_current.clearRect(0, 0, editor.width, editor.height)
-            imageEditor.setImage(null, editor.width, editor.height) // properly reset the drawing canvas
+            editor.setBrush(editor.layers.drawing)
         },
         trackHistory: true,
     },
@@ -334,6 +368,7 @@ class EditorHistory {
         this.events = [] // stack of all events (actions/edits)
         this.current_edit = null
         this.rewind_index = 0 // how many events back into the history we've rewound to. (current state is just after event at index 'length - this.rewind_index - 1')
+        this.basePixels = null // initial mask, including a previously saved or loaded bitmap
     }
     push(event) {
         // probably add something here eventually to save state every x events
@@ -351,6 +386,14 @@ class EditorHistory {
         this.push({
             type: "action",
             id: action,
+        })
+    }
+    pushRaster() {
+        // Store the completed pixels: extraction and inversion cannot be reproduced
+        // by replaying an asynchronous image load or the current input image.
+        this.push({
+            type: "raster",
+            pixels: this.editor.layers.drawing.ctx.getImageData(0, 0, this.editor.width, this.editor.height),
         })
     }
     editBegin(x, y) {
@@ -374,11 +417,16 @@ class EditorHistory {
     }
     clear() {
         this.events = []
+        this.rewind_index = 0
+        this.current_edit = null
+        this.basePixels = this.editor.layers.drawing.ctx.getImageData(0, 0, this.editor.width, this.editor.height)
     }
     undo() {
+        this.editor.cancelPendingMaskLoad()
         this.rewindTo(this.rewind_index + 1)
     }
     redo() {
+        this.editor.cancelPendingMaskLoad()
         this.rewindTo(this.rewind_index - 1)
     }
     rewindTo(new_rewind_index) {
@@ -400,6 +448,8 @@ class EditorHistory {
 
         if (snapshot_index != -1) {
             ctx.putImageData(this.events[snapshot_index].snapshot, 0, 0)
+        } else if (this.basePixels) {
+            ctx.putImageData(this.basePixels, 0, 0)
         }
 
         for (var i = snapshot_index + 1; i <= target_index; i++) {
@@ -407,6 +457,8 @@ class EditorHistory {
             if (event.type == "action") {
                 var action = IMAGE_EDITOR_ACTIONS.find((a) => a.id == event.id)
                 action.handler(this.editor)
+            } else if (event.type == "raster") {
+                ctx.putImageData(event.pixels, 0, 0)
             } else if (event.type == "edit") {
                 var tool = IMAGE_EDITOR_TOOLS.find((t) => t.id == event.id)
                 this.editor.setBrush(this.editor.layers.drawing, event.options)
@@ -505,7 +557,9 @@ class ImageEditor {
 
         if (this.inpainter) {
             this.selectOption("color", IMAGE_EDITOR_SECTIONS.find((s) => s.name == "color").options.indexOf("#ffffff"))
-            this.selectOption("opacity", IMAGE_EDITOR_SECTIONS.find((s) => s.name == "opacity").options.indexOf(0.4))
+            // The overlay is visually translucent via CSS; a normal white brush should
+            // paint full inpainting coverage unless opacity is deliberately reduced.
+            this.selectOption("opacity", IMAGE_EDITOR_SECTIONS.find((s) => s.name == "opacity").options.indexOf(0))
         }
 
         // initialize the right-side controls
@@ -524,12 +578,15 @@ class ImageEditor {
         var actionsTitle = document.createElement("h4")
         actionsTitle.textContent = "Actions"
         actionsContainer.appendChild(actionsTitle)
-        IMAGE_EDITOR_ACTIONS.forEach((action) => {
+        IMAGE_EDITOR_ACTIONS.filter((action) => !action.inpainterOnly || this.inpainter).forEach((action) => {
             var element = document.createElement("div")
             var icon = document.createElement("i")
             element.className = "image-editor-button button"
             if (action.className) {
                 element.className += " " + action.className
+            }
+            if (action.title) {
+                element.title = action.title
             }
             icon.className = action.icon
             element.appendChild(icon)
@@ -544,12 +601,17 @@ class ImageEditor {
 
         this.setSize(512, 512)
     }
+    cancelPendingMaskLoad() {
+        this.maskLoadRevision = (this.maskLoadRevision || 0) + 1
+        return this.maskLoadRevision
+    }
     show() {
         this.popup.classList.add("active")
         document.addEventListener("keydown", this.keyHandlerBound, true)
         document.addEventListener("keyup", this.keyHandlerBound, true)
     }
     hide() {
+        this.cancelPendingMaskLoad()
         this.popup.classList.remove("active")
         document.removeEventListener("keydown", this.keyHandlerBound, true)
         document.removeEventListener("keyup", this.keyHandlerBound, true)
@@ -561,6 +623,7 @@ class ImageEditor {
         if (width == this.width && height == this.height) {
             return
         }
+        this.cancelPendingMaskLoad()
 
         let windowWidth = window.innerWidth
         if (window.innerWidth > 700) {  // keep in sync with main.css: @media screen and (max-width: 700px) {..}
@@ -602,6 +665,7 @@ class ImageEditor {
         this.container.style.cursor = this.tool.cursor
     }
     setImage(url, width, height) {
+        this.cancelPendingMaskLoad()
         this.setSize(width, height)
         this.layers.background.ctx.clearRect(0, 0, this.width, this.height)
         if (!(url && this.inpainter)) {
@@ -621,6 +685,54 @@ class ImageEditor {
         }
         this.history.clear()
     }
+    applyMaskPixels(pixels) {
+        // Both extraction and inversion replace the entire mask and are one undo step.
+        if (!pixels || pixels.length !== this.width * this.height * 4) {
+            throw new RangeError("Mask pixel dimensions do not match the editor")
+        }
+        this.cancelPendingMaskLoad()
+        const ctx = this.layers.drawing.ctx
+        const imageData = ctx.createImageData(this.width, this.height)
+        imageData.data.set(pixels)
+        ctx.clearRect(0, 0, this.width, this.height)
+        ctx.putImageData(imageData, 0, 0)
+        this.setBrush(this.layers.drawing)
+        this.history.pushRaster()
+    }
+    extractAlphaMask() {
+        if (!this.inpainter) return
+        if (!initImagePreview.complete || !initImagePreview.naturalWidth) {
+            showToast("Load a transparent PNG as the initial image first.", 5000, true)
+            return
+        }
+
+        // Sample the currently displayed img2img image at the actual output size.
+        // This also supports the core plugin's crop/resize and clipboard import path.
+        const canvas = document.createElement("canvas")
+        canvas.width = this.width
+        canvas.height = this.height
+        const ctx = canvas.getContext("2d", { willReadFrequently: true })
+        let converted
+        try {
+            ctx.drawImage(initImagePreview, 0, 0, this.width, this.height)
+            converted = alphaToInpaintingMaskPixels(ctx.getImageData(0, 0, this.width, this.height).data)
+        } catch (error) {
+            showToast("Unable to read the image alpha channel. Try loading a local PNG file.", 5000, true)
+            return
+        }
+
+        if (!converted.hasTransparency) {
+            showToast("The initial image is fully opaque; no transparent pixels were found.", 5000, true)
+            return
+        }
+
+        this.applyMaskPixels(converted.pixels)
+    }
+    invertMask() {
+        if (!this.inpainter) return
+        const pixels = this.layers.drawing.ctx.getImageData(0, 0, this.width, this.height).data
+        this.applyMaskPixels(invertInpaintingMaskPixels(pixels))
+    }
     saveImage() {
         if (!this.inpainter) {
             // This is not an inpainter, so save the image as the new img2img input
@@ -638,25 +750,56 @@ class ImageEditor {
         this.hide()
     }
     getImg() {
-        // a drop-in replacement of the drawingboard version
-        return this.layers.drawing.canvas.toDataURL()
+        if (!this.inpainter) {
+            return this.layers.drawing.canvas.toDataURL()
+        }
+
+        // The backend converts the PNG to RGB. Make grayscale mask values explicit,
+        // rather than relying on how it treats transparent RGBA overlay pixels.
+        const canvas = document.createElement("canvas")
+        canvas.width = this.width
+        canvas.height = this.height
+        const ctx = canvas.getContext("2d")
+        const mask = ctx.createImageData(this.width, this.height)
+        const overlay = this.layers.drawing.ctx.getImageData(0, 0, this.width, this.height)
+        mask.data.set(opaqueInpaintingMaskPixels(overlay.data))
+        ctx.putImageData(mask, 0, 0)
+        return canvas.toDataURL("image/png")
     }
     setImg(dataUrl) {
-        // a drop-in replacement of the drawingboard version
-        var image = new Image()
-        image.onload = () => {
-            var ctx = this.layers.drawing.ctx
-            ctx.clearRect(0, 0, this.width, this.height)
-            ctx.globalCompositeOperation = "source-over"
-            ctx.globalAlpha = 1
-            ctx.filter = "none"
-            ctx.drawImage(image, 0, 0, this.width, this.height)
+        // Restoring a persisted backend PNG is a baseline change, not a new
+        // history edit. Black mask pixels must not obscure the input image.
+        const revision = this.cancelPendingMaskLoad()
+        if (!dataUrl) {
+            // Task recall can explicitly supply no mask; do not attempt to
+            // decode "undefined" as a URL or retain a previous mask.
+            this.layers.drawing.ctx.clearRect(0, 0, this.width, this.height)
             this.setBrush(this.layers.drawing)
+            this.history.clear()
+            return
+        }
+        const width = this.width
+        const height = this.height
+        const image = new Image()
+        image.onload = () => {
+            if (revision !== this.maskLoadRevision || width !== this.width || height !== this.height) return
+            const canvas = document.createElement("canvas")
+            canvas.width = width
+            canvas.height = height
+            const source = canvas.getContext("2d", { willReadFrequently: true })
+            source.drawImage(image, 0, 0, width, height)
+            const pixels = source.getImageData(0, 0, width, height).data
+            this.applyMaskPixels(this.inpainter ? importInpaintingMaskPixels(pixels) : pixels)
+            this.history.clear()
+        }
+        image.onerror = () => {
+            if (revision === this.maskLoadRevision) showToast("Unable to restore the saved mask image.", 5000, true)
         }
         image.src = dataUrl
     }
     runAction(action_id) {
         var action = IMAGE_EDITOR_ACTIONS.find((a) => a.id == action_id)
+        if (action_id !== "load_mask") this.cancelPendingMaskLoad()
         if (action.trackHistory) {
             this.history.pushAction(action_id)
         }
@@ -678,7 +821,7 @@ class ImageEditor {
             layer.ctx.globalCompositeOperation = "source-over"
             var tool = IMAGE_EDITOR_TOOLS.find((t) => t.id == options.tool)
             if (tool && tool.setBrush) {
-                tool.setBrush(editor, layer)
+                tool.setBrush(this, layer)
             }
         } else {
             Object.values(["drawing", "overlay"])
@@ -778,6 +921,7 @@ class ImageEditor {
         event.preventDefault()
         // do drawing-related stuff
         if (type == "mousedown" || (type == "mouseenter" && event.buttons == 1)) {
+            this.cancelPendingMaskLoad()
             this.drawing = true
             this.tool.begin(this, this.ctx_current, x, y)
             this.tool.begin(this, this.ctx_overlay, x, y, true)
