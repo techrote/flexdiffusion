@@ -1,0 +1,39 @@
+name: Inpainting mask UI and history (PR 9)
+
+on:
+  push:
+    branches:
+      - feat/inpaint-mask-from-png-alpha
+  pull_request:
+    paths:
+      - '.github/workflows/inpainting-mask.yml'
+      - 'ui/media/js/inpainting-mask.js'
+      - 'ui/media/js/image-editor.js'
+      - 'ui/index.html'
+      - 'scripts/test_inpainting_*.cjs'
+      - 'scripts/run_inpainting_browser.cjs'
+      - 'tests/inpainting-browser.html'
+  workflow_dispatch:
+
+jobs:
+  test-mask:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check ui/media/js/inpainting-mask.js
+          node --check ui/media/js/image-editor.js
+          node --check scripts/test_inpainting_mask.cjs
+          node --check scripts/test_inpainting_history.cjs
+          node --check scripts/run_inpainting_browser.cjs
+      - name: Pixel conversion and history tests
+        run: npm run test:mask
+      - name: Real headless Chrome browser tests
+        run: |
+          command -v google-chrome || command -v chromium || command -v chromium-browser
+          npm run test:mask:browser
