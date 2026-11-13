@@ -27,9 +27,12 @@ jobs:
           node --check ui/media/js/generation-workspaces.js
           node --check ui/plugins/ui/circuit-bend.plugin.js
           node --check tests/test_compositor.js
+          node --check tests/test_blend_lab_ui.js
           node --check tests/test_generation_workspaces.js
       - name: Test RGB composition modes and masked opacity
         run: node tests/test_compositor.js
+      - name: Test Blend Lab UI lifecycle (file decode, mask, export, img2img, cancellation)
+        run: node tests/test_blend_lab_ui.js
       - name: Test generator workspace routing and vanilla isolation
         run: node tests/test_generation_workspaces.js
       - name: Existing circuit-bend UI regression
