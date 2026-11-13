@@ -56,6 +56,13 @@ click("tab-main")
 assert.equal(window.__flexDiffusionGenerationWorkspace, "vanilla")
 assert.deepEqual(moves.at(-1), ["tab-content-main", ["editor", "preview"]])
 
+// Both experimental rows must be hidden in ordinary Generate. A literal
+// backslash-n after the comma accidentally turns the second selector into an
+// escaped type selector and leaks the experimental grid into vanilla Generate.
+const css = fs.readFileSync(path.join(__dirname, "../ui/media/css/generation-workspaces.css"), "utf8")
+assert.match(css, /#tab-content-main #circuit_bend_row,\\s*#tab-content-main #bend_grid_row/)
+assert.doesNotMatch(css, /#tab-content-main #circuit_bend_row,\\\\n/)
+
 // The sampler plugin must explicitly gate request injection in ordinary Generate.
 const plugin = fs.readFileSync(path.join(__dirname, "../ui/plugins/ui/circuit-bend.plugin.js"), "utf8")
 assert.match(plugin, /root\.__flexDiffusionGenerationWorkspace !== "vanilla"\) task\.reqBody\.circuit_bend = read\(\)/)
