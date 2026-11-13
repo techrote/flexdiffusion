@@ -5,7 +5,6 @@ request's actual browser-facing transport into the queued RenderTask, including
 nested circuit-bend settings, and reject invalid controls before enqueue.
 """
 
-import json
 import os
 import sys
 import unittest
@@ -22,10 +21,14 @@ class RenderHttpContractTests(unittest.TestCase):
         from fastapi.testclient import TestClient
 
         cls.server = server
-        # UI mounts require a user plugins folder that a clean CI checkout
-        # intentionally lacks. Only static-file mounts are stubbed; real route
-        # registration, Pydantic parsing and RenderTask construction are used.
-        with patch.object(server.server_api, "mount"):
+        # Clean CI checkouts have no per-user plugins folder; mount the real
+        # production static routes that actually exist on disk, without
+        # creating user directories or changing application source.
+        available_plugins = tuple(
+            (directory, prefix) for directory, prefix in server.app.UI_PLUGINS_SOURCES
+            if os.path.isdir(directory)
+        )
+        with patch.object(server.app, "UI_PLUGINS_SOURCES", available_plugins):
             server.init()
         # Without the context-manager, production startup/shutdown hooks and
         # render workers are not started by this in-process HTTP transport.
