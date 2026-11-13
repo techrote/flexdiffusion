@@ -124,7 +124,13 @@ class RenderHttpContractTests(unittest.TestCase):
                 "mix_block": 2, "seed": 123, "schedule": "exact",
             },
         }
-        response, queued = self.post_render(payload)
+        # Keep the real server.enqueue_task response envelope and /stream URL;
+        # replace only the background scheduler insertion (no render threads).
+        queued = []
+        with patch.object(task_manager, "enqueue_task", side_effect=queued.append), \
+             patch.object(self.server.app, "getConfig", return_value={}), \
+             patch.object(self.server.app, "save_to_config"):
+            response = self.client.post("/render", json=payload)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(queued), 1)
         task = queued[0]
