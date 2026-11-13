@@ -206,7 +206,8 @@ async function run() {
     stale.release()
     await pending
     assert.deepEqual([...q("canvas").pixels], [44, 55, 66, 255], "last selection wins")
-    assert.equal(objectUrls.size, 0, "all image object URLs revoked")
+    assert.equal(objectUrls.size, 1, "only the delayed PNG download URL remains")
+    assert.equal([...objectUrls.values()][0].kind, "png", "all image decode URLs revoked")
     console.log("Blend Lab UI: image decode, all tab controls, masks, export, img2img, size guards, stale async decode passed")
 }
 run().catch(error => { console.error(error); process.exitCode = 1 })
