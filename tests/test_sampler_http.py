@@ -120,7 +120,7 @@ class RenderHttpContractTests(unittest.TestCase):
             "output_after_step": 4, "seed": 2,
             "circuit_bend": {
                 "enabled": True, "mode": "sampler_mix",
-                "mix_method": "alternate", "mix_history": "independent",
+                "mix_method": "alternate", "mix_history": "stale",
                 "mix_block": 2, "seed": 123, "schedule": "exact",
             },
         }
@@ -165,7 +165,7 @@ class RenderHttpContractTests(unittest.TestCase):
 
         self.assertEqual(invoked["sampler_name"], "plms")
         self.assertEqual(invoked["output_after_step"], 4)
-        self.assertEqual(invoked["circuit_bend"]["mix_history"], "independent")
+        self.assertEqual(invoked["circuit_bend"]["mix_history"], "stale")
         self.assertEqual(invoked["circuit_bend"]["seed"], 123)
         self.assertEqual(task.response["sampling_metadata"]["completed_steps"], 8)
 
