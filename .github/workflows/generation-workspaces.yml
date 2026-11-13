@@ -28,6 +28,7 @@ jobs:
           node --check ui/plugins/ui/circuit-bend.plugin.js
           node --check tests/test_compositor.js
           node --check tests/test_blend_lab_ui.js
+          node --check tests/test_blend_lab_browser.cjs
           node --check tests/test_generation_workspaces.js
       - name: Test RGB composition modes and masked opacity
         run: node tests/test_compositor.js
@@ -35,6 +36,8 @@ jobs:
         run: node tests/test_blend_lab_ui.js
       - name: Test generator workspace routing and vanilla isolation
         run: node tests/test_generation_workspaces.js
+      - name: Browser smoke with real Chrome canvas, PNG decode and img2img handoff
+        run: node tests/test_blend_lab_browser.cjs
       - name: Existing circuit-bend UI regression
         run: node tests/test_circuit_bend_ui.js
       - name: Existing step-viewer regression
