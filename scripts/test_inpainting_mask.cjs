@@ -2,6 +2,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const {
     alphaToInpaintingMaskPixels,
+    importInpaintingMaskPixels,
     invertInpaintingMaskPixels,
     opaqueInpaintingMaskPixels,
 } = require("../ui/media/js/inpainting-mask.js")
@@ -45,4 +46,40 @@ test("malformed RGBA buffers are rejected", () => {
         assert.throws(() => fn(null), TypeError)
         assert.throws(() => fn([1, 2, 3]), TypeError)
     }
+})
+
+test("imported opaque PNG masks appear translucent and roundtrip without changing coverage", () => {
+    const exported = rgba(0, 0, 0, 255, 128, 128, 128, 255, 255, 255, 255, 255)
+    const displayed = importInpaintingMaskPixels(exported)
+    assert.deepEqual([...displayed], [0, 0, 0, 0, 128, 128, 128, 77, 255, 255, 255, 153])
+    assert.deepEqual(opaqueInpaintingMaskPixels(displayed), exported)
+})
+
+test("import ignores hidden RGB under transparent alpha and scales partially transparent masks", () => {
+    const result = importInpaintingMaskPixels(rgba(
+        255, 255, 255, 0,
+        255, 255, 255, 128,
+        128, 128, 128, 255,
+    ))
+    assert.deepEqual([...result], [0, 0, 0, 0, 128, 128, 128, 77, 128, 128, 128, 77])
+})
+
+test("export really is opaque grayscale even for arbitrary painted RGB colors", () => {
+    const exported = opaqueInpaintingMaskPixels(rgba(255, 0, 0, 153, 0, 255, 0, 153, 0, 0, 255, 153))
+    assert.deepEqual([...exported], [76, 76, 76, 255, 150, 150, 150, 255, 29, 29, 29, 255])
+})
+
+test("partial-alpha extraction survives exported PNG and image re-import", () => {
+    const alphaInput = rgba(234, 22, 2, 255, 89, 44, 0, 128, 255, 255, 255, 0)
+    const expected = rgba(0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 255)
+    const visible = alphaToInpaintingMaskPixels(alphaInput)
+    assert.equal(visible.hasTransparency, true)
+    const exported = opaqueInpaintingMaskPixels(visible.pixels)
+    assert.deepEqual(exported, expected)
+    assert.deepEqual(opaqueInpaintingMaskPixels(importInpaintingMaskPixels(exported)), expected)
+})
+
+test("import validates buffer shape like the other conversion functions", () => {
+    assert.throws(() => importInpaintingMaskPixels(null), TypeError)
+    assert.throws(() => importInpaintingMaskPixels([1, 2, 3]), TypeError)
 })
