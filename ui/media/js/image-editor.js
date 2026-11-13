@@ -127,41 +127,49 @@ const IMAGE_EDITOR_ACTIONS = [
         className: "load_mask",
         icon: "fa-regular fa-folder-open",
         handler: (editor) => {
-            let el = document.createElement("input")
-            el.setAttribute("type", "file")
-            el.addEventListener("change", function () {
-                if (this.files.length === 0) {
-                    return
-                }
+            const picker = document.createElement("input")
+            picker.setAttribute("type", "file")
+            picker.setAttribute("accept", "image/*")
+            picker.addEventListener("change", function () {
+                if (!this.files || this.files.length === 0) return
 
-                let reader = new FileReader()
-                let file = this.files[0]
-
-                reader.addEventListener("load", function (event) {
-                    let maskData = reader.result
-
-                    var image = new Image()
+                // The last user action wins. Do not let an old FileReader/Image
+                // callback overwrite a new mask, resize, undo or closed editor.
+                const revision = editor.cancelPendingMaskLoad()
+                const width = editor.width
+                const height = editor.height
+                const reader = new FileReader()
+                reader.addEventListener("load", () => {
+                    const image = new Image()
                     image.onload = () => {
-                        const ctx = editor.layers.drawing.ctx
-                        ctx.save()
-                        ctx.globalCompositeOperation = "source-over"
-                        ctx.filter = "none"
-                        ctx.clearRect(0, 0, editor.width, editor.height)
-                        ctx.drawImage(image, 0, 0, editor.width, editor.height)
-                        ctx.restore()
-                        // Record the pixels after the asynchronous read, not a file
-                        // dialog action that undo/redo would attempt to replay.
-                        editor.history.pushRaster()
+                        if (revision !== editor.maskLoadRevision || width !== editor.width || height !== editor.height) return
+                        try {
+                            const canvas = document.createElement("canvas")
+                            canvas.width = width
+                            canvas.height = height
+                            const ctx = canvas.getContext("2d", { willReadFrequently: true })
+                            ctx.drawImage(image, 0, 0, width, height)
+                            const pixels = ctx.getImageData(0, 0, width, height).data
+                            if (editor.inpainter) {
+                                editor.applyMaskPixels(importInpaintingMaskPixels(pixels))
+                            } else {
+                                editor.applyMaskPixels(pixels)
+                            }
+                        } catch (error) {
+                            showToast("Unable to load the selected mask image.", 5000, true)
+                        }
                     }
-                    image.src = maskData
+                    image.onerror = () => {
+                        if (revision === editor.maskLoadRevision) showToast("The selected file is not a readable image.", 5000, true)
+                    }
+                    image.src = reader.result
                 })
-
-                if (file) {
-                    reader.readAsDataURL(file)
-                }
+                reader.addEventListener("error", () => {
+                    if (revision === editor.maskLoadRevision) showToast("Unable to read the selected mask file.", 5000, true)
+                })
+                reader.readAsDataURL(this.files[0])
             })
-
-            el.click()
+            picker.click()
         },
         trackHistory: false,
     },
@@ -201,7 +209,7 @@ const IMAGE_EDITOR_ACTIONS = [
         icon: "fa-solid fa-xmark",
         handler: (editor) => {
             editor.ctx_current.clearRect(0, 0, editor.width, editor.height)
-            imageEditor.setImage(null, editor.width, editor.height) // properly reset the drawing canvas
+            editor.setBrush(editor.layers.drawing)
         },
         trackHistory: true,
     },
@@ -360,6 +368,7 @@ class EditorHistory {
         this.events = [] // stack of all events (actions/edits)
         this.current_edit = null
         this.rewind_index = 0 // how many events back into the history we've rewound to. (current state is just after event at index 'length - this.rewind_index - 1')
+        this.basePixels = null // initial mask, including a previously saved or loaded bitmap
     }
     push(event) {
         // probably add something here eventually to save state every x events
@@ -408,11 +417,16 @@ class EditorHistory {
     }
     clear() {
         this.events = []
+        this.rewind_index = 0
+        this.current_edit = null
+        this.basePixels = this.editor.layers.drawing.ctx.getImageData(0, 0, this.editor.width, this.editor.height)
     }
     undo() {
+        this.editor.cancelPendingMaskLoad()
         this.rewindTo(this.rewind_index + 1)
     }
     redo() {
+        this.editor.cancelPendingMaskLoad()
         this.rewindTo(this.rewind_index - 1)
     }
     rewindTo(new_rewind_index) {
@@ -434,6 +448,8 @@ class EditorHistory {
 
         if (snapshot_index != -1) {
             ctx.putImageData(this.events[snapshot_index].snapshot, 0, 0)
+        } else if (this.basePixels) {
+            ctx.putImageData(this.basePixels, 0, 0)
         }
 
         for (var i = snapshot_index + 1; i <= target_index; i++) {
@@ -583,12 +599,17 @@ class ImageEditor {
 
         this.setSize(512, 512)
     }
+    cancelPendingMaskLoad() {
+        this.maskLoadRevision = (this.maskLoadRevision || 0) + 1
+        return this.maskLoadRevision
+    }
     show() {
         this.popup.classList.add("active")
         document.addEventListener("keydown", this.keyHandlerBound, true)
         document.addEventListener("keyup", this.keyHandlerBound, true)
     }
     hide() {
+        this.cancelPendingMaskLoad()
         this.popup.classList.remove("active")
         document.removeEventListener("keydown", this.keyHandlerBound, true)
         document.removeEventListener("keyup", this.keyHandlerBound, true)
@@ -600,6 +621,7 @@ class ImageEditor {
         if (width == this.width && height == this.height) {
             return
         }
+        this.cancelPendingMaskLoad()
 
         let windowWidth = window.innerWidth
         if (window.innerWidth > 700) {  // keep in sync with main.css: @media screen and (max-width: 700px) {..}
@@ -641,6 +663,7 @@ class ImageEditor {
         this.container.style.cursor = this.tool.cursor
     }
     setImage(url, width, height) {
+        this.cancelPendingMaskLoad()
         this.setSize(width, height)
         this.layers.background.ctx.clearRect(0, 0, this.width, this.height)
         if (!(url && this.inpainter)) {
@@ -662,6 +685,10 @@ class ImageEditor {
     }
     applyMaskPixels(pixels) {
         // Both extraction and inversion replace the entire mask and are one undo step.
+        if (!pixels || pixels.length !== this.width * this.height * 4) {
+            throw new RangeError("Mask pixel dimensions do not match the editor")
+        }
+        this.cancelPendingMaskLoad()
         const ctx = this.layers.drawing.ctx
         const imageData = ctx.createImageData(this.width, this.height)
         imageData.data.set(pixels)
@@ -738,21 +765,29 @@ class ImageEditor {
         return canvas.toDataURL("image/png")
     }
     setImg(dataUrl) {
-        // a drop-in replacement of the drawingboard version
-        var image = new Image()
+        // Restoring a persisted backend PNG is a baseline change, not a new
+        // history edit. Black mask pixels must not obscure the input image.
+        const revision = this.cancelPendingMaskLoad()
+        const width = this.width
+        const height = this.height
+        const image = new Image()
         image.onload = () => {
-            var ctx = this.layers.drawing.ctx
-            ctx.clearRect(0, 0, this.width, this.height)
-            ctx.globalCompositeOperation = "source-over"
-            ctx.globalAlpha = 1
-            ctx.filter = "none"
-            ctx.drawImage(image, 0, 0, this.width, this.height)
-            this.setBrush(this.layers.drawing)
+            if (revision !== this.maskLoadRevision || width !== this.width || height !== this.height) return
+            const canvas = document.createElement("canvas")
+            canvas.width = width
+            canvas.height = height
+            const source = canvas.getContext("2d", { willReadFrequently: true })
+            source.drawImage(image, 0, 0, width, height)
+            const pixels = source.getImageData(0, 0, width, height).data
+            this.applyMaskPixels(this.inpainter ? importInpaintingMaskPixels(pixels) : pixels)
+            this.history.clear()
         }
+        image.onerror = () => showToast("Unable to restore the saved mask image.", 5000, true)
         image.src = dataUrl
     }
     runAction(action_id) {
         var action = IMAGE_EDITOR_ACTIONS.find((a) => a.id == action_id)
+        if (action_id !== "load_mask") this.cancelPendingMaskLoad()
         if (action.trackHistory) {
             this.history.pushAction(action_id)
         }
@@ -774,7 +809,7 @@ class ImageEditor {
             layer.ctx.globalCompositeOperation = "source-over"
             var tool = IMAGE_EDITOR_TOOLS.find((t) => t.id == options.tool)
             if (tool && tool.setBrush) {
-                tool.setBrush(editor, layer)
+                tool.setBrush(this, layer)
             }
         } else {
             Object.values(["drawing", "overlay"])
@@ -874,6 +909,7 @@ class ImageEditor {
         event.preventDefault()
         // do drawing-related stuff
         if (type == "mousedown" || (type == "mouseenter" && event.buttons == 1)) {
+            this.cancelPendingMaskLoad()
             this.drawing = true
             this.tool.begin(this, this.ctx_current, x, y)
             this.tool.begin(this, this.ctx_overlay, x, y, true)
