@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR event github.sha is a synthetic test merge, not the owned PR head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -42,7 +45,8 @@ jobs:
             "torchruntime" "transformers==4.33.2" "diffusers==0.28.2" \
             "huggingface_hub==0.21.4" "accelerate==0.23.0" \
             "kornia==0.6.11" "pytorch-lightning==1.9.5" \
-            "fastapi==0.115.6" "uvicorn==0.19.0" "rich==12.6.0"
+            "fastapi==0.115.6" "uvicorn==0.19.0" "rich==12.6.0" \
+            "wandb==0.17.2"
       - name: Fail closed if real native solvers cannot import
         run: |
           python - <<'PY'
@@ -68,5 +72,5 @@ jobs:
       - name: Capture source identifier
         if: always()
         run: |
-          echo "SOURCE_HEAD=${{ github.sha }}"
+          echo "SOURCE_HEAD=${{ github.event.pull_request.head.sha || github.sha }}"
           git rev-parse HEAD
