@@ -118,6 +118,11 @@
             if (!image.naturalWidth || !image.naturalHeight) {
                 throw new Error("The image has no readable dimensions.")
             }
+            // Reject *every* decoded input, not only A. A huge B or coverage
+            // file can consume hundreds of MB before being resampled to a tiny A.
+            if (image.naturalWidth * image.naturalHeight > pixelsMax) {
+                throw new Error("Image exceeds the 8-megapixel safety limit. Downscale it before composing.")
+            }
             return image
         } finally {
             URL.revokeObjectURL(url)
