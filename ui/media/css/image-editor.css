@@ -208,6 +208,13 @@
 	opacity: 0.75;
 }
 
+/* Keep alpha as unmodified 8-bit mask coverage. Browser PNG premultiplication
+   must not destroy antialiased low-value grays during mask reload/export. */
+.inpainter .editor-canvas-drawing,
+.inpainter .editor-canvas-overlay {
+	opacity: 0.6;
+}
+
 #init_image_preview_container .button {
 	display: flex;
 	padding: 6px;
