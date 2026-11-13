@@ -2,7 +2,8 @@
   "scripts": {
     "prettier-fix": "npx prettier --write \"./**/*.js\"",
     "prettier-check": "npx prettier --check \"./**/*.js\"",
-    "test:mask": "node --test scripts/test_inpainting_mask.cjs"
+    "test:mask": "node --test scripts/test_inpainting_mask.cjs scripts/test_inpainting_history.cjs",
+    "test:mask:browser": "node scripts/run_inpainting_browser.cjs"
   },
   "devDependencies": {
     "prettier": "^1.19.1"
