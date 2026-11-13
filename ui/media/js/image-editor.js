@@ -770,6 +770,14 @@ class ImageEditor {
         // Restoring a persisted backend PNG is a baseline change, not a new
         // history edit. Black mask pixels must not obscure the input image.
         const revision = this.cancelPendingMaskLoad()
+        if (!dataUrl) {
+            // Task recall can explicitly supply no mask; do not attempt to
+            // decode "undefined" as a URL or retain a previous mask.
+            this.layers.drawing.ctx.clearRect(0, 0, this.width, this.height)
+            this.setBrush(this.layers.drawing)
+            this.history.clear()
+            return
+        }
         const width = this.width
         const height = this.height
         const image = new Image()
@@ -784,7 +792,9 @@ class ImageEditor {
             this.applyMaskPixels(this.inpainter ? importInpaintingMaskPixels(pixels) : pixels)
             this.history.clear()
         }
-        image.onerror = () => showToast("Unable to restore the saved mask image.", 5000, true)
+        image.onerror = () => {
+            if (revision === this.maskLoadRevision) showToast("Unable to restore the saved mask image.", 5000, true)
+        }
         image.src = dataUrl
     }
     runAction(action_id) {
