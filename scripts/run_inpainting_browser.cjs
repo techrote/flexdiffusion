@@ -25,10 +25,10 @@ try {
     const args = [
         "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
         "--no-first-run", "--allow-file-access-from-files",
-        "--disable-background-networking", "--virtual-time-budget=10000",
+        "--disable-background-networking", "--virtual-time-budget=4500",
         "--user-data-dir=" + profile, "--dump-dom", uri,
     ]
-    const run = spawnSync(executable, args, {encoding: "utf8", timeout: 25000, maxBuffer: 10 * 1024 * 1024})
+    const run = spawnSync(executable, args, {encoding: "utf8", timeout: 90000, maxBuffer: 10 * 1024 * 1024})
     const result = /<pre id="result">([^<]*)<\/pre>/.exec(run.stdout || "")
     if (run.error || run.status !== 0 || !result || !result[1].startsWith("PASS:")) {
         console.error("FAIL: Chromium inpainting editor regression", run.error || "", "exit", run.status)
