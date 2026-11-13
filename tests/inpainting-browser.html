@@ -142,10 +142,34 @@ function img2imgUnload() {}
     equal(values(await readImage(imageInpainter.getImg())), [46, 90, 17], "undo async file mask load")
     imageInpainter.history.redo()
     equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "redo async file mask load")
-    // Resizing invalidates existing masks and any pending asynchronous file import.
+    // Clear must affect the inpainting editor, never the separate normal editor.
+    imageEditor.setSize(3, 1)
+    imageEditor.applyMaskPixels(Uint8ClampedArray.from([30, 50, 100, 255, 30, 50, 100, 255, 30, 50, 100, 255]))
+    imageInpainter.runAction("clear")
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0], "clear did not clear the inpainting mask")
+    check(imageEditor.layers.drawing.ctx.getImageData(0, 0, 1, 1).data[3] === 255, "inpaint Clear erased ordinary editor")
+    imageInpainter.history.undo()
+    equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "undo of inpaint Clear lost prior mask")
+    // Start an asynchronous file load, then resize immediately. The stale
+    // callback must be ignored rather than overwriting the newly sized mask.
     initImagePreview.src = initial
     await initImagePreview.decode()
+    document.createElement = function (tag) {
+        const element = nativeCreate(tag)
+        if (tag.toLowerCase() === "input") {
+            picker = element
+            element.click = function () {}
+        }
+        return element
+    }
+    imageInpainter.runAction("load_mask")
+    document.createElement = nativeCreate
+    picker.files = transfer.files
+    picker.dispatchEvent(new Event("change"))
     imageInpainter.setImage(initial, 4, 1)
+    await new Promise((resolve) => setTimeout(resolve, 180))
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0, 0], "stale file import overwrote resized mask")
+    check(imageInpainter.history.events.length === 0, "stale file import polluted history")
     imageInpainter.runAction("extract_alpha_mask")
     const scaled = values(await readImage(imageInpainter.getImg()))
     check(scaled.length === 4 && scaled[0] === 0 && scaled[3] === 255, "RGBA resampling not aligned to editor dimensions")
