@@ -122,7 +122,7 @@ const smoke = String.raw`
     assert(!toggled.checked && window.browserTest.maskChange === 1, "mask toggle not cleared")
     assert(window.browserTest.maskClears === 1 && window.browserTest.historyClears === 1, "old mask raster/history not cleared")
     assert(initial.src.startsWith("data:image/png;base64,"), "PNG img2img handoff failed")
-    assert(window.browserTest.dimensions.join("x") === "2x1", "handoff dimensions incorrect")
+    assert(!window.browserTest.dimensions, "tiny image must not zero generator dimensions")
     assert(window.__flexDiffusionGenerationWorkspace === "vanilla", "handoff did not return to Generate")
     document.getElementById("result").textContent = "PASS-BLEND-BROWSER"
 })().catch(err => {
