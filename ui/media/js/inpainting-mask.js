@@ -22,6 +22,21 @@ function alphaToInpaintingMaskPixels(pixels) {
     return { pixels: result, hasTransparency }
 }
 
+// A mask-file or persisted opaque PNG is a *coverage* image, not an opaque
+// drawing overlay. Convert grayscale to the editor's translucent preview.
+// Treat a transparent input pixel as no mask, even if its hidden RGB is white.
+function importInpaintingMaskPixels(pixels) {
+    checkRgbaPixels(pixels)
+    const result = new Uint8ClampedArray(pixels.length)
+    for (let i = 0; i < pixels.length; i += 4) {
+        const luminance = Math.round(0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2])
+        const value = Math.round((luminance * pixels[i + 3]) / 255)
+        result[i] = result[i + 1] = result[i + 2] = value
+        result[i + 3] = Math.round(value * INPAINTING_MASK_PREVIEW_OPACITY)
+    }
+    return result
+}
+
 function invertInpaintingMaskPixels(pixels) {
     checkRgbaPixels(pixels)
     const result = new Uint8ClampedArray(pixels.length)
@@ -42,10 +57,14 @@ function opaqueInpaintingMaskPixels(pixels) {
     checkRgbaPixels(pixels)
     const result = new Uint8ClampedArray(pixels.length)
     for (let i = 0; i < pixels.length; i += 4) {
-        const visible = pixels[i + 3] !== 0
-        result[i] = visible ? pixels[i] : 0
-        result[i + 1] = visible ? pixels[i + 1] : 0
-        result[i + 2] = visible ? pixels[i + 2] : 0
+        // Only alpha=0 means unpainted. A partially translucent editor mark
+        // stores its intended coverage in RGB; multiplying by preview alpha
+        // again would square antialiased mask values.
+        const value =
+            pixels[i + 3] === 0
+                ? 0
+                : Math.round(0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2])
+        result[i] = result[i + 1] = result[i + 2] = value
         result[i + 3] = 255
     }
     return result
@@ -53,5 +72,10 @@ function opaqueInpaintingMaskPixels(pixels) {
 
 // Browser: classic script globals. Node: lightweight tests without a DOM dependency.
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = { alphaToInpaintingMaskPixels, invertInpaintingMaskPixels, opaqueInpaintingMaskPixels }
+    module.exports = {
+        alphaToInpaintingMaskPixels,
+        importInpaintingMaskPixels,
+        invertInpaintingMaskPixels,
+        opaqueInpaintingMaskPixels,
+    }
 }
