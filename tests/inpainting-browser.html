@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Inpainting editor browser regression</title>
+<link rel="stylesheet" href="../ui/media/css/image-editor.css">
 <style>
 .editor-controls-left,.editor-controls-right{width:140px}
 .editor-controls-center{width:500px}
@@ -71,6 +72,7 @@ function img2imgUnload() {}
     const inpaintActions = document.querySelector("#image-inpainter .editor-controls-right").textContent
     check(!vanillaActions.includes("Extract PNG alpha mask") && !vanillaActions.includes("Invert mask"), "inpainting actions leaked to ordinary editor")
     check(inpaintActions.includes("Extract PNG alpha mask") && inpaintActions.includes("Invert mask"), "inpainting actions absent")
+    check(getComputedStyle(imageInpainter.layers.drawing.canvas).opacity === "0.6", "inpainting preview visual opacity missing")
     imageInpainter.runAction("extract_alpha_mask")
     // Canvas PNG decode can round antialiased alpha by one byte across
     // Chrome graphics backends; the endpoints and undo pixels stay exact.
@@ -99,7 +101,7 @@ function img2imgUnload() {}
     // Backend PNG is opaque grayscale, never a colored or semi-transparent overlay.
     imageInpainter.applyMaskPixels(Uint8ClampedArray.from([255, 0, 0, 153, 0, 255, 0, 153, 0, 0, 255, 153]))
     const coloredExport = await readImage(imageInpainter.getImg())
-    equal(values(coloredExport), [76, 150, 29], "painted RGB was not grayscale on export")
+    equal(values(coloredExport), [46, 90, 17], "painted RGB was not grayscale on export")
     equal(coloredExport.pixels.filter((_, i) => i % 4 === 3), [255, 255, 255], "export is not opaque")
     // setImg is a baseline restore, not a history edit; dark mask pixels remain visually transparent.
     const saved = imageInpainter.getImg()
@@ -107,7 +109,14 @@ function img2imgUnload() {}
     await new Promise((resolve) => setTimeout(resolve, 120))
     check(imageInpainter.history.events.length === 0, "setImg incorrectly retained or added history")
     check(imageInpainter.layers.drawing.ctx.getImageData(0, 0, 1, 1).data[3] > 0, "saved nonzero mask not visible")
-    equal(values(await readImage(imageInpainter.getImg())), [76, 150, 29], "persisted mask lost grayscale values")
+    equal(values(await readImage(imageInpainter.getImg())), [46, 90, 17], "persisted mask lost grayscale values")
+    // The lowest grayscale values must not disappear from PNG premultiplication.
+    const subtleMask = sourceImage([1, 1, 1, 255, 8, 8, 8, 255, 29, 29, 29, 255], 3, 1)
+    imageInpainter.setImg(subtleMask)
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    equal(values(await readImage(imageInpainter.getImg())), [1, 8, 29], "low coverage rounded away during PNG reimport")
+    imageInpainter.setImg(saved)
+    await new Promise((resolve) => setTimeout(resolve, 120))
     // True local PNG mask import through the actual FileReader and Image callbacks.
     const fileData = sourceImage([255, 255, 255, 255, 128, 128, 128, 255, 0, 0, 0, 255], 3, 1)
     const nativeCreate = document.createElement.bind(document)
@@ -129,7 +138,7 @@ function img2imgUnload() {}
     await new Promise((resolve) => setTimeout(resolve, 160))
     equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "async file mask load")
     imageInpainter.history.undo()
-    equal(values(await readImage(imageInpainter.getImg())), [76, 150, 29], "undo async file mask load")
+    equal(values(await readImage(imageInpainter.getImg())), [46, 90, 17], "undo async file mask load")
     imageInpainter.history.redo()
     equal(values(await readImage(imageInpainter.getImg())), [255, 128, 0], "redo async file mask load")
     // Resizing invalidates existing masks and any pending asynchronous file import.
