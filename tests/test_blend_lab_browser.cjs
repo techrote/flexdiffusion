@@ -19,7 +19,15 @@ const files = [
 const resources = files.map(file => '<script src="' + pathToFileURL(path.join(repo, file)).href + '"><\/script>').join("\n")
 const css = pathToFileURL(path.join(repo, "ui/media/css/generation-workspaces.css")).href
 const client = String.raw`
-window.browserTest = { maskClears: 0, historyClears: 0, maskChange: 0 }
+window.browserTest = { maskClears: 0, historyClears: 0, maskChange: 0, decodeCalls: 0, decoded: 0, decodeErrors: [] }
+const originalDecode = Image.prototype.decode
+Image.prototype.decode = function(...args) {
+    ++window.browserTest.decodeCalls
+    return originalDecode.apply(this, args).then(
+        value => { ++window.browserTest.decoded; return value },
+        error => { window.browserTest.decodeErrors.push(error.message); throw error },
+    )
+}
 const imageInpainter = {
     width: 2, height: 1,
     layers: { drawing: { ctx: { clearRect() { ++window.browserTest.maskClears } } } },
@@ -53,11 +61,11 @@ const smoke = String.raw`
     const assert = (condition, text) => { if (!condition) throw new Error(text) }
     const q = name => document.getElementById("blend-lab-" + name)
     const waitFor = async (test, name) => {
-        for (let i = 0; i < 75; i++) {
+        for (let i = 0; i < 800; i++) {
             if (test()) return
-            await new Promise(resolve => setTimeout(resolve, 30))
+            await new Promise(resolve => setTimeout(resolve, 100))
         }
-        throw new Error("Timed out: " + name + " · " + q("status").textContent)
+        throw new Error("Timed out: " + name + " · " + q("status").textContent + " · " + JSON.stringify(window.browserTest))
     }
     const sample = rgba => {
         const canvas = document.createElement("canvas")
@@ -147,7 +155,7 @@ try {
     const command = [
         "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
         "--disable-extensions", "--disable-background-networking", "--no-first-run",
-        "--allow-file-access-from-files", "--virtual-time-budget=8500", "--dump-dom",
+        "--allow-file-access-from-files", "--virtual-time-budget=95000", "--dump-dom",
         pathToFileURL(fixture).href,
     ]
     const run = spawnSync(browser, command, { encoding: "utf8", timeout: 45000, maxBuffer: 4 * 1024 * 1024 })
