@@ -1,9 +1,6 @@
 name: Sampler native CPU regressions
 
 on:
-  push:
-    branches:
-      - codex/sampler-art-progress
   pull_request:
     branches:
       - trajectory-artifacts
@@ -32,7 +29,12 @@ jobs:
         run: |
           # Do not pull CUDA PyTorch transitively from older image-generation dependencies.
           python -m pip install --no-deps \
-            "sdkit==2.1.1" "stable-diffusion-sdkit==2.1.5" "k-diffusion==0.0.12"
+            "sdkit==2.1.1" "stable-diffusion-sdkit==2.1.5"
+          # The actual pinned k-diffusion solver imports evaluation/layer modules
+          # eagerly; let pip resolve its own small Python dependencies (cleanfid,
+          # clip, dctorch, scikit-image, jsonmerge, resize-right) rather than
+          # accidentally calling an incomplete solver-install a passing test.
+          python -m pip install "k-diffusion==0.0.12"
           python -m pip install \
             "numpy==1.26.4" "pydantic==1.10.21" "einops==0.7.0" \
             "omegaconf==2.3.0" "tqdm" "scipy" "safetensors==0.3.3" \
@@ -60,9 +62,9 @@ jobs:
         env:
           SD_UI_PATH: ${{ github.workspace }}/ui
         run: |
-          python -m unittest -v \
-            tests.test_trajectory_sampler_adapters.NativeSamplerTests \
-            tests.test_trajectory_circuit_bend.BendNumericsTests
+          PYTHONPATH=tests python -m unittest -v \
+            test_trajectory_sampler_adapters.NativeSamplerTests \
+            test_trajectory_circuit_bend.BendNumericsTests
       - name: Capture source identifier
         if: always()
         run: |
