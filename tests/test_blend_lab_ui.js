@@ -7,7 +7,6 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 const vm = require("node:vm")
-const { FlexDiffusionCompositor: ignored } = {} // compositor is the real production module
 const compositor = require("../ui/media/js/compositor.js")
 
 const nodes = new Map()
@@ -101,7 +100,11 @@ class ImageMock {
     }
 }
 function get(id) {
-    if (!nodes.has(id)) nodes.set(id, new Element(id))
+    if (!nodes.has(id)) {
+        const node = id === "blend-lab-canvas" ? new Canvas() : new Element(id)
+        node.id = id
+        nodes.set(id, node)
+    }
     return nodes.get(id)
 }
 const document = {
@@ -130,6 +133,8 @@ const imageInpainter = {
 function createTab(request) {
     assert.equal(request.id, "blend-lab")
     for (const [, id] of request.content.matchAll(/id="(blend-lab-[a-z-]+)"/g)) get(id)
+    get("blend-lab-save").disabled = true
+    get("blend-lab-use-init").disabled = true
     get("tab-" + request.id)
 }
 vm.runInNewContext(
