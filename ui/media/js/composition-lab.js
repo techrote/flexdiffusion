@@ -256,8 +256,13 @@
             imageInpainter.history.clear()
         }
         init.src = canvas.toDataURL("image/png")
+        // main.js rounds generation dimensions to multiples of IMAGE_STEP_SIZE.
+        // Tiny source images (e.g. comparison thumbnails) would round to 0×0;
+        // keep the user's existing valid generator dimensions instead.
+        const minimumRenderSide = typeof IMAGE_STEP_SIZE === "number" ? IMAGE_STEP_SIZE : 64
         if (typeof setImageWidthHeight === "function" &&
             typeof MAX_INIT_IMAGE_DIMENSION !== "undefined" &&
+            canvas.width >= minimumRenderSide && canvas.height >= minimumRenderSide &&
             canvas.width <= MAX_INIT_IMAGE_DIMENSION && canvas.height <= MAX_INIT_IMAGE_DIMENSION) {
             setImageWidthHeight(canvas.width, canvas.height)
         }
