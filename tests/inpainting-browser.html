@@ -173,6 +173,10 @@ function img2imgUnload() {}
     imageInpainter.runAction("extract_alpha_mask")
     const scaled = values(await readImage(imageInpainter.getImg()))
     check(scaled.length === 4 && scaled[0] === 0 && scaled[3] === 255, "RGBA resampling not aligned to editor dimensions")
+    const toastsBeforeAbsentMask = toasts.length
+    imageInpainter.setImg(undefined)
+    equal(values(await readImage(imageInpainter.getImg())), [0, 0, 0, 0], "missing task mask did not clear the previous mask")
+    check(imageInpainter.history.events.length === 0 && toasts.length === toastsBeforeAbsentMask, "missing task mask retained history or showed an error")
     report.textContent = "PASS: " + passed + " browser assertions"
 })().catch((error) => {
     document.getElementById("result").textContent = "FAIL: " + (error.stack || error)
