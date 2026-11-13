@@ -2,6 +2,9 @@
 
 FlexDiffusion's initial research track for making the SD1.x denoising trajectory a first-class inspectable and eventually editable object.
 
+Start with the [sampler art progress, GIF gallery and pipeline guide](SAMPLER_ART_PROGRESS_2026-10-10.md)
+and [sampler output and circuit-bend controls](SAMPLER_OUTPUT_AND_BENDS.md).
+
 Read in this order:
 
 - `ARCHITECTURE.md` — design boundaries and history model;

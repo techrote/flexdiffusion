@@ -1,0 +1,94 @@
+name: Sampler native CPU regressions
+
+on:
+  pull_request:
+    branches:
+      - trajectory-artifacts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  classic-samplers:
+    name: Real sdkit solvers (CPU · ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows has the same real native import/test contract, not a syntax-only gate.
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # PR event github.sha is a synthetic test merge, not the owned PR head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Require exact PR head checkout
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "SOURCE_HEAD=$actual"
+          test "$actual" = "$EXPECTED_HEAD"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: scripts/check_modules.py
+      - name: Install CPU PyTorch and matching torchvision
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu"
+      - name: Install classic sampler implementation and focused runtime dependencies
+        run: |
+          # Do not pull CUDA PyTorch transitively from older image-generation dependencies.
+          python -m pip install --no-deps \
+            "sdkit==2.1.1" "stable-diffusion-sdkit==2.1.5"
+          # The actual pinned k-diffusion solver imports evaluation/layer modules
+          # eagerly; let pip resolve its own small Python dependencies (cleanfid,
+          # clip, dctorch, scikit-image, jsonmerge, resize-right) rather than
+          # accidentally calling an incomplete solver-install a passing test.
+          python -m pip install "k-diffusion==0.0.12"
+          python -m pip install \
+            "numpy==1.26.4" "pydantic==1.10.21" "einops==0.7.0" \
+            "omegaconf==2.3.0" "tqdm" "scipy" "safetensors==0.3.3" \
+            "torchdiffeq" "torchsde==0.2.6" "Pillow" "requests" "piexif" \
+            "torchruntime" "transformers==4.33.2" "diffusers==0.28.2" \
+            "huggingface_hub==0.21.4" "accelerate==0.23.0" \
+            "kornia==0.6.11" "pytorch-lightning==1.9.5" \
+            "fastapi==0.115.6" "uvicorn==0.19.0" "rich==12.6.0" \
+            "wandb==0.17.2" "ruamel.yaml==0.17.21" \
+            "sqlalchemy==2.0.19" "python-multipart==0.0.6" \
+            "picklescan" "pycloudflared==0.2.0" "httpx==0.27.2"
+      - name: Fail closed if real native solvers cannot import
+        run: |
+          python - <<'PY'
+          import torch
+          import sdkit
+          from sdkit.generate.sampler import default_samplers, k_samplers, unipc_samplers
+          from ldm.models.diffusion.ddim import DDIMSampler
+          from ldm.models.diffusion.plms import PLMSSampler
+          assert "plms" in default_samplers.samplers
+          assert "ddim" in default_samplers.samplers
+          assert "heun" in k_samplers.samplers
+          assert "unipc_snr" in unipc_samplers.samplers
+          assert not torch.cuda.is_available(), "CPU qualification must not use an occupied GPU"
+          print("Real classic solvers imported with", torch.__version__)
+          PY
+      - name: Run native solver math, callback and determinism tests without skips
+        env:
+          SD_UI_PATH: ${{ github.workspace }}/ui
+        run: |
+          PYTHONPATH=tests python -m unittest -v \
+            test_trajectory_sampler_adapters.NativeSamplerTests \
+            test_trajectory_circuit_bend.BendNumericsTests \
+            test_sampler_http.RenderHttpContractTests
+      - name: Capture source identifier
+        if: always()
+        run: |
+          echo "SOURCE_HEAD=${{ github.event.pull_request.head.sha || github.sha }}"
+          git rev-parse HEAD

@@ -137,13 +137,15 @@ def make_images(
     # this context field for inclusion in the ordinary Easy Diffusion response.
     output_step_results = getattr(context, "output_step_results", None) or []
     context.output_step_results = []
+    sampling_metadata = getattr(context, "sampling_metadata", None) or {}
+    actual_steps = sampling_metadata.get("actual_steps", req.num_inference_steps)
 
     intermediate_images = []
     intermediate_metadata = []
     for image, seed, metadata in flatten_output_step_results(
         output_step_results,
         req.seed,
-        req.num_inference_steps,
+        actual_steps,
     ):
         intermediate_images.append(ResponseImage(data=image, seed=seed))
         intermediate_metadata.append(metadata)
@@ -168,11 +170,14 @@ def make_images(
     )
     res = res.json()
 
-    if intermediate_metadata:
+    if intermediate_metadata or sampling_metadata:
         final_metadata = [
             {
-                "output_step": req.num_inference_steps,
-                "total_steps": req.num_inference_steps,
+                "output_step": sampling_metadata.get("completed_steps", actual_steps),
+                "total_steps": actual_steps,
+                "requested_steps": req.num_inference_steps,
+                "actual_steps": actual_steps,
+                "sampling_status": sampling_metadata.get("status", "complete"),
                 "is_intermediate": False,
                 "intermediate_representation": "final",
             }
@@ -180,6 +185,9 @@ def make_images(
         ]
         for output, metadata in zip(res["output"], intermediate_metadata + final_metadata):
             output.update(metadata)
+
+    res["sampling_metadata"] = sampling_metadata
+    res["output_step_warnings"] = getattr(context, "output_step_warnings", None) or []
 
     data_queue.put(json.dumps(res))
     log.info("Task completed")
@@ -310,6 +318,11 @@ def generate_images_internal(
     if not capabilities.get("output_after_step", False):
         generate_kwargs.pop("output_after_step", None)
         generate_kwargs.pop("intermediate_representation", None)
+    if not capabilities.get("circuit_bend", False):
+        generate_kwargs.pop("bend_grid", None)
+        bend = generate_kwargs.pop("circuit_bend", None)
+        if bend and bend.get("enabled"):
+            raise RuntimeError("The selected backend does not support circuit bending")
 
     trajectory = getattr(task_data, "trajectory", None)
     if trajectory is not None and trajectory.enabled:
@@ -364,7 +377,8 @@ def make_step_callback(
         step_time = time.time() - last_callback_time if last_callback_time != -1 else -1
         last_callback_time = time.time()
 
-        progress = {"step": i, "step_time": step_time, "total_steps": n_steps}
+        actual_steps = args[0].get("actual_steps", n_steps) if args and isinstance(args[0], dict) else n_steps
+        progress = {"step": i, "step_time": step_time, "total_steps": actual_steps}
 
         if images is not None:
             progress["output"] = update_temp_img(images, task_temp_images)

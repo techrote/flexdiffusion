@@ -1,0 +1,20 @@
+{
+  "sequences": 36,
+  "frames_verified": 576,
+  "exact_repeated_sequences": 9,
+  "independent_reference_endpoints_matched": 76,
+  "same_seed_plms_variants_match_reference": true,
+  "dimensions": [
+    512,
+    512
+  ],
+  "steps": 16,
+  "seeds": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "donor_seed": 5,
+  "ddim_noise_seed": 123
+}

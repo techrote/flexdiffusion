@@ -2,6 +2,7 @@ from typing import Any, List, Dict, Union
 
 from pydantic import BaseModel
 from easydiffusion.trajectory_types import TrajectoryData
+from easydiffusion.circuit_bend import CircuitBendOptions
 
 
 class GenerateImageRequest(BaseModel):
@@ -16,6 +17,8 @@ class GenerateImageRequest(BaseModel):
     num_inference_steps: int = 50
     output_after_step: int = None
     intermediate_representation: str = "both"
+    circuit_bend: CircuitBendOptions = None
+    bend_grid: Dict[str, Any] = None
     guidance_scale: float = 7.5
     distilled_guidance_scale: float = 3.5
 

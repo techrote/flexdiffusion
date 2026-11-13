@@ -200,6 +200,7 @@ def flatten_output_step_results(results, seed, total_steps):
                     image,
                     int(seed) + index,
                     {
+                        **group.get("metadata", {}),
                         "output_step": step,
                         "total_steps": int(total_steps),
                         "is_intermediate": True,
@@ -229,8 +230,21 @@ class OutputAfterStepCollector:
         self.representation = normalize_intermediate_representation(representation)
         self._snapshots = []
         self._captured_steps = set()
+        self.snapshot_metadata = {}
+        self.requested_steps = self.total_steps
+        self._configure_steps()
 
-        sparse = decode_sparse_representation(self.representation, self.total_steps)
+    def set_actual_steps(self, total_steps):
+        """Resolve a native timetable without changing the requested selection."""
+        _validate_total_steps(total_steps)
+        if self._snapshots:
+            raise ValueError("Cannot change the schedule after capture has started")
+        self.total_steps = total_steps
+        self._configure_steps()
+
+    def _configure_steps(self):
+
+        sparse = decode_sparse_representation(self.representation, self.requested_steps)
         if sparse is None:
             legacy_steps = set(range(self.start_step, self.total_steps))
             self.capture_steps = sorted(legacy_steps)
@@ -267,7 +281,7 @@ class OutputAfterStepCollector:
 
         return callback_index in self._denoised_steps or callback_index in self._solver_steps
 
-    def capture_step(self, callback_index, solver_state, denoised=None):
+    def capture_step(self, callback_index, solver_state, denoised=None, metadata=None):
         callback_index = int(callback_index)
         if not self.wants_callback_index(callback_index):
             return False
@@ -276,7 +290,7 @@ class OutputAfterStepCollector:
 
         if callback_index in self._denoised_steps:
             if denoised is None:
-                raise ValueError("k-diffusion callback did not provide a denoised estimate")
+                raise ValueError("Sampler observation did not provide a denoised estimate")
             self._snapshots.append(
                 (callback_index, "denoised", _owned_cpu_snapshot(denoised))
             )
@@ -287,6 +301,13 @@ class OutputAfterStepCollector:
             )
 
         self._captured_steps.add(callback_index)
+        metadata = dict(metadata or {})
+        for representation in ("denoised", "solver_state"):
+            label = metadata.get(f"{representation}_label")
+            values = {key: value for key, value in metadata.items() if not key.endswith("_label")}
+            if label:
+                values["representation_label"] = label
+            self.snapshot_metadata[(callback_index, representation)] = values
         return True
 
     def pop_snapshots(self):

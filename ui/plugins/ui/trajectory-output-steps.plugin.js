@@ -118,10 +118,11 @@
         }
     }
 
-    function outputCountSummary(steps, totalSteps, includeEndpointSolverStates) {
+    function outputCountSummary(steps, totalSteps, includeEndpointSolverStates, actualSteps = totalSteps) {
         const total = validateTotalSteps(totalSteps)
-        const denoisedCount = (steps || []).filter((step) => step < total).length
-        const solverCount = endpointSolverSteps(steps, total, includeEndpointSolverStates).length
+        const finalOnly = steps?.length === 1 && steps[0] === total
+        const denoisedCount = finalOnly ? 0 : (steps || []).filter((step) => step < actualSteps).length
+        const solverCount = finalOnly ? 0 : endpointSolverSteps(steps, actualSteps, includeEndpointSolverStates).length
         const totalOutputs = denoisedCount + solverCount + 1
         return {
             denoisedCount,
@@ -194,7 +195,8 @@
                         <span class="simple-tooltip top-left">
                             Printer-style syntax: 10, 16, 20-24 captures denoised estimates at
                             10, 16, 20, 21, 22, 23 and 24. The final sampler image is always included.
-                            MVP: classic txt2img fixed-step k-diffusion samplers.
+                            Classic txt2img: fixed-step k-diffusion, DDIM, PLMS and UniPC.
+                            UniPC captures predictor clean estimates. DDIM/PLMS may use more native updates than requested.
                         </span>
                     </i>
                     <br><small id="capture_iteration_summary"></small>
@@ -226,7 +228,7 @@
                     <span class="simple-tooltip top-left">
                         Adds the raw noisy solver state at the first and last requested callback boundaries.
                         If the last requested iteration is the true final step, the sampler's ordinary final image
-                        is used instead because k-diffusion has no post-final callback boundary.
+                        is used instead. UniPC endpoints are corrected states; their clean estimates come from the predictor.
                     </span>
                 </i>
             </td>
@@ -236,6 +238,7 @@
         const endpointField = endpointRow.querySelector("#capture_endpoint_solver_states")
         const summaryField = captureRow.querySelector("#capture_iteration_summary")
         const backendField = document.querySelector("#backend")
+        const samplerField = document.querySelector("#sampler_name")
         const initImagePreviewContainer = document.querySelector("#init_image_preview_container")
         let linkedToInferenceSteps = true
 
@@ -277,7 +280,11 @@
                 return
             }
             summaryField.style.color = ""
-            const count = outputCountSummary(steps, totalSteps(), endpointField.checked)
+            let exactSchedule = false
+            try { exactSchedule = root.__flexDiffusionReadCircuitBend?.()?.schedule === "exact" } catch (_) { /* Controls show validation errors. */ }
+            const nativeCount = !exactSchedule && ["ddim", "plms"].includes(samplerField?.value) && totalSteps() <= 1000
+                ? Math.ceil(1000 / Math.floor(1000 / totalSteps())) : totalSteps()
+            const count = outputCountSummary(steps, totalSteps(), endpointField.checked, nativeCount)
             const pieces = []
             if (count.denoisedCount) {
                 pieces.push(`${count.denoisedCount} denoised capture${count.denoisedCount === 1 ? "" : "s"}`)
@@ -287,6 +294,8 @@
             }
             pieces.push("final")
             summaryField.textContent = `${pieces.join(" + ")} = ${count.totalOutputs} output${count.totalOutputs === 1 ? "" : "s"} / sampler`
+            if (nativeCount !== totalSteps()) summaryField.textContent += ` · SD1.x native schedule: ${nativeCount} updates`
+            if (samplerField?.value === "unipc_snr_2") summaryField.textContent += " · Experimental: one image per batch"
         }
 
         function updateVisibility() {
@@ -326,6 +335,8 @@
             captureField.dispatchEvent(new Event("change"))
         })
         endpointField.addEventListener("change", updateSummary)
+        document.addEventListener("circuit_bend_change", updateSummary)
+        samplerField?.addEventListener("change", updateVisibility)
 
         if (backendField) {
             backendField.addEventListener("change", updateVisibility)
@@ -504,6 +515,9 @@
                         // Make the per-image value precise rather than inheriting
                         // the task-level transport marker / legacy "both" value.
                         imageRequest[counter].intermediate_representation = representation
+                        for (const key of ["representation_label", "observation_phase", "estimate_basis", "timestep", "sigma", "sigma_hat", "requested_steps", "actual_steps", "sampling_status", "bend_weight", "noise_memory", "history_freeze_at", "history_strength", "donor_seed", "blend_target", "blend_curve", "blend_weight", "eta", "noise_seed", "active_sampler", "sampler_iteration", "mix_method", "mix_history", "history_length", "exchange_weight", "mix_output"]) {
+                            if (entry[key] !== undefined) imageRequest[counter][key] = entry[key]
+                        }
                     }
 
                     let stepLabel = item.querySelector(".imgStepLabel")
@@ -513,11 +527,19 @@
                         const seedLabel = item.querySelector(".imgSeedLabel")
                         seedLabel?.insertAdjacentElement("afterend", stepLabel)
                     }
-                    const repLabel = entry.is_intermediate ? REPRESENTATION_LABELS[representation] : null
+                    const repLabel = entry.is_intermediate ? (entry.representation_label || REPRESENTATION_LABELS[representation]) : (entry.sampling_status === "interrupted" ? "Stopped · partial state" : "Final")
                     stepLabel.innerText = repLabel
                         ? `Step ${step}/${total} · ${repLabel}`
                         : `Step ${step}/${total}`
+                    if (entry.requested_steps && entry.requested_steps !== total) stepLabel.innerText += ` · ${entry.requested_steps} requested`
                 })
+            }
+
+            if (!livePreview && res?.output_step_warnings?.length) {
+                const warning = document.createElement("div")
+                warning.className = "output-step-warning"
+                warning.textContent = res.output_step_warnings.join(" · ")
+                outputContainer.appendChild(warning)
             }
 
             return result

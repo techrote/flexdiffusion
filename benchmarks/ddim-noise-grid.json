@@ -1,0 +1,17 @@
+{
+  "schema": "flexdiffusion-bend-grid/v1",
+  "request": {
+    "prompt": "humanoid dinosaur cyborg mercenary holding a futuristic kinetic anti-materiel rifle, science fiction illustration",
+    "negative_prompt": "human face, human skin, text, watermark",
+    "seed": 2, "width": 512, "height": 512, "num_outputs": 1,
+    "num_inference_steps": 16, "guidance_scale": 10, "sampler_name": "ddim",
+    "use_stable_diffusion_model": "sd-v1-4",
+    "circuit_bend": {
+      "enabled": true, "mode": "ddim", "schedule": "exact",
+      "eta": 0.8, "noise": 1, "memory": 0, "seed": 123
+    }
+  },
+  "x": { "key": "eta", "values": [0, 0.5, 1] },
+  "y": { "key": "memory", "values": [0, 1] },
+  "seeds": [2, 3, 4, 5], "baseline": true
+}

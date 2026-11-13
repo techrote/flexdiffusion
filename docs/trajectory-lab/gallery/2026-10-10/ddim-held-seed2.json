@@ -1,0 +1,490 @@
+{
+  "schema": "flexdiffusion-step-gif/v1",
+  "source_evidence": "seed-bends-ddim-20261010",
+  "render": {
+    "name": "ddim-held-seed2",
+    "request": {
+      "prompt": "A single humanoid dinosaur cyborg mercenary standing upright, two long robotic legs, two mechanical arms, armored torso, green scaly reptilian head and toothed snout. Holding a futuristic kinetic anti-materiel rifle in both clawed hands, long barrel and scope. Full-length centered character design, entire head and feet visible, neon city, science fiction illustration.",
+      "negative_prompt": "human face, human skin, man, woman, quadruped, multiple characters, duplicate bodies, crowd, helmet, mask, cropped head, cropped feet, close-up, extra limbs, text, watermark",
+      "seed": 2,
+      "width": 512,
+      "height": 512,
+      "num_outputs": 1,
+      "num_inference_steps": 16,
+      "guidance_scale": 10,
+      "init_image": null,
+      "control_image": null,
+      "sampler_name": "ddim"
+    },
+    "circuit_bend": {
+      "enabled": true,
+      "mode": "ddim",
+      "schedule": "exact",
+      "eta": 0.8,
+      "history_source": "freeze",
+      "blend_target": "history",
+      "donor_seed": 3,
+      "blend_curve": "constant",
+      "blend_start": 0,
+      "blend_end": 1,
+      "blend_period": 4,
+      "churn": 10.0,
+      "noise": 1.0,
+      "start": 1,
+      "end": null,
+      "window_unit": "iterations",
+      "every": 1,
+      "seed": 123,
+      "pattern": "fresh",
+      "memory": 1.0,
+      "fade_in": 0,
+      "fade_out": 0,
+      "history_strength": 1
+    },
+    "sha256": "edbb91c1f3842acecc3e23742ba3e0183c8178018fb42e8884a1717154e136ad",
+    "noise_seed": 123,
+    "donor_seed": null,
+    "repeat_all_steps_exact": true,
+    "step_sha256": [
+      "6b34e544b3cc44a5913210b55dfdaafb838e3f0b4ca3e6764acd8f90f5f620ba",
+      "9dd5f715dc7bffd69704f5506f485d2a680e031264ae84a7a10c4371e3a82d40",
+      "973ffc66caf1b0ce6b1e5cb589bb82c184caf9201a8b5de175b9917eb3651f19",
+      "3885d3b5957b4709ebea67ba54bbc18fce8aca9b216d62cb1f7556fc7d933b90",
+      "2b3942d15a76fb8f988999f37879fe9eb29bd249b3f38c0b101911e1ae7bb0e9",
+      "dea26a5e43b590116d9efc38794cfa7206c6c5424dd0476842a3c365183f62c7",
+      "827935fd7a402d77cac06f440b212965da47c4783ecbe6c69c775ff7c7c3f7fe",
+      "c1a7109a80b29f3f2c4ebb46df44b502115661f634d1d899c469ccacfc0d321d",
+      "597b4df0995a02e12c96218f60b197fa13371ac2b7ef070f476fce007c645e69",
+      "03f68629ca3184299b4e44dd96c4ab0fc2b2805d9c9f7cc94b2c658b2ead5d7d",
+      "77a5a1f0344f3b9d2732875146b59c92c8adb4392666b00861ac6c1a68b3e546",
+      "c001da1d914331e54976ef58283fd551fcaaabe968c9d189fba4da944d4ab1b9",
+      "265e1c19dac53fc363f1e1f113cc81898a61a89b1e3625e046ed687e42cc6483",
+      "403e4e42af011126c3c22d6473ba6d889a1e888c297ceb8379dff111ca5f955c",
+      "d4b480acad9b0146e549853c7d4f7e3c599a3f9acd7368fdf1f080abd9e69500",
+      "edbb91c1f3842acecc3e23742ba3e0183c8178018fb42e8884a1717154e136ad"
+    ],
+    "observations": [
+      {
+        "step": 1,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 876.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 2,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 813.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 3,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 751.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 4,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 688.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 5,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 626.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 6,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 563.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 7,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 501.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 8,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 438.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 9,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 376.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 10,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 313.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 11,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 251.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 12,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 188.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 13,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 126.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 14,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 63.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 15,
+        "representation": "denoised",
+        "metadata": {
+          "timestep": 1.0,
+          "observation_phase": "before_update",
+          "estimate_basis": "model_prediction",
+          "eta": 0.8,
+          "noise_seed": 123,
+          "noise_memory": 1.0,
+          "representation_label": "Denoised estimate",
+          "requested_steps": 16,
+          "actual_steps": 16
+        }
+      },
+      {
+        "step": 16,
+        "representation": "final",
+        "metadata": {
+          "observation_phase": "final_return"
+        }
+      }
+    ],
+    "sampling_metadata": {
+      "sampler_name": "ddim",
+      "requested_steps": 16,
+      "actual_steps": 16,
+      "completed_steps": 16,
+      "status": "complete",
+      "circuit_bend": {
+        "enabled": true,
+        "mode": "ddim",
+        "schedule": "exact",
+        "eta": 0.8,
+        "history_source": "freeze",
+        "blend_target": "history",
+        "donor_seed": 3,
+        "blend_curve": "constant",
+        "blend_start": 0.0,
+        "blend_end": 1.0,
+        "blend_period": 4,
+        "churn": 10.0,
+        "noise": 1.0,
+        "start": 1.0,
+        "end": null,
+        "window_unit": "iterations",
+        "every": 1,
+        "seed": 123,
+        "pattern": "fresh",
+        "memory": 1.0,
+        "fade_in": 0.0,
+        "fade_out": 0.0,
+        "history_strength": 1.0
+      },
+      "schedule": "exact",
+      "timesteps": [
+        1,
+        63,
+        126,
+        188,
+        251,
+        313,
+        376,
+        438,
+        501,
+        563,
+        626,
+        688,
+        751,
+        813,
+        876,
+        938
+      ]
+    }
+  },
+  "playback": {
+    "speed_slider": 8,
+    "continuous": true,
+    "endpoint_hold_ms": 1000,
+    "duration_ms": 5640,
+    "timeline": [
+      {
+        "step": 1,
+        "delay": 100
+      },
+      {
+        "step": 2,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 16,
+        "delay": 100
+      },
+      {
+        "step": 15,
+        "delay": 13
+      },
+      {
+        "step": 14,
+        "delay": 13
+      },
+      {
+        "step": 13,
+        "delay": 13
+      },
+      {
+        "step": 12,
+        "delay": 13
+      },
+      {
+        "step": 11,
+        "delay": 13
+      },
+      {
+        "step": 10,
+        "delay": 13
+      },
+      {
+        "step": 9,
+        "delay": 13
+      },
+      {
+        "step": 8,
+        "delay": 13
+      },
+      {
+        "step": 7,
+        "delay": 13
+      },
+      {
+        "step": 6,
+        "delay": 13
+      },
+      {
+        "step": 5,
+        "delay": 13
+      },
+      {
+        "step": 4,
+        "delay": 13
+      },
+      {
+        "step": 3,
+        "delay": 13
+      },
+      {
+        "step": 2,
+        "delay": 13
+      }
+    ]
+  },
+  "export": {
+    "file": "ddim-held-seed2.gif",
+    "bytes": 6022950,
+    "sha256": "f68aaea44c6e9dc1d2ea81ad382a9dd3eb6b953f4844c6af1dec94c13f5f9310",
+    "frames": 30,
+    "width": 512,
+    "height": 512,
+    "palette": "Existing viewer 256-colour per-frame palette",
+    "encoder": "Pillow LZW; decoded RGB and timing verified against viewer data"
+  }
+}

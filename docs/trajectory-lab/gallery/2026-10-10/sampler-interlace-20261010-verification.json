@@ -1,0 +1,23 @@
+{
+  "sequences": 28,
+  "frames_verified": 448,
+  "mixed_sequences": 20,
+  "native_reference_sequences": 8,
+  "repeat_exact_sequences": 7,
+  "all_mixed_sampler_labels_verified": true,
+  "one_generation_seed_per_sequence": true,
+  "eta": 0,
+  "noise_seed_in_recipe": 123,
+  "noise_seed_used": false,
+  "seeds": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "size": [
+    512,
+    512
+  ],
+  "steps": 16
+}

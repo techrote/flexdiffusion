@@ -36,7 +36,7 @@
     }
 
     function markdownValue(value) {
-        return scalar(value).replace(/\r?\n/g, " ↵ ")
+        return scalar(value).replace(/\r?\n/g, " â†µ ")
     }
 
     function taskSummaryLines(task, index) {
@@ -56,6 +56,8 @@
             `- Seed: ${markdownValue(req.seed ?? task?.seed)}`,
             `- Model: ${markdownValue(req.use_stable_diffusion_model)}`,
             `- Sampler: ${markdownValue(req.sampler_name)}`,
+            `- Circuit bend: ${markdownValue(req.circuit_bend?.enabled ? req.circuit_bend : "Off")}`,
+            `- Bend grid: ${markdownValue(req.bend_grid)}`,
             `- Dimensions: ${markdownValue(req.width)}x${markdownValue(req.height)}`,
             `- Inference steps: ${markdownValue(req.num_inference_steps)}`,
             `- Output after step: ${markdownValue(req.output_after_step)}`,
@@ -231,6 +233,32 @@
             seed: request.seed ?? img.dataset.seed ?? null,
             output_step: request.output_step ?? parseOptionalInt(img.dataset.outputStep),
             total_steps: request.total_steps ?? parseOptionalInt(img.dataset.totalSteps),
+            requested_steps: request.requested_steps ?? null,
+            actual_steps: request.actual_steps ?? null,
+            representation_label: request.representation_label ?? null,
+            observation_phase: request.observation_phase ?? null,
+            estimate_basis: request.estimate_basis ?? null,
+            timestep: request.timestep ?? null,
+            sigma: request.sigma ?? null,
+            sigma_hat: request.sigma_hat ?? null,
+            sampling_status: request.sampling_status ?? null,
+            bend_weight: request.bend_weight ?? null,
+            noise_memory: request.noise_memory ?? null,
+            history_freeze_at: request.history_freeze_at ?? null,
+            history_strength: request.history_strength ?? null,
+            donor_seed: request.donor_seed ?? null,
+            blend_target: request.blend_target ?? null,
+            blend_curve: request.blend_curve ?? null,
+            blend_weight: request.blend_weight ?? null,
+            eta: request.eta ?? null,
+            noise_seed: request.noise_seed ?? null,
+            active_sampler: request.active_sampler ?? null,
+            sampler_iteration: request.sampler_iteration ?? null,
+            mix_method: request.mix_method ?? null,
+            mix_history: request.mix_history ?? null,
+            history_length: request.history_length ?? null,
+            exchange_weight: request.exchange_weight ?? null,
+            mix_output: request.mix_output ?? null,
             intermediate_representation:
                 request.intermediate_representation ?? img.dataset.intermediateRepresentation ?? null,
             width: img.naturalWidth || parseOptionalInt(img.getAttribute("width")),
@@ -653,7 +681,7 @@
             ctx.fillText(`Task ${index + 1}: ${req.sampler_name || "unknown sampler"}`, padding + 15, y + 28)
             ctx.font = "15px sans-serif"
             ctx.fillStyle = "#d0d0d0"
-            const summary = `Seed ${req.seed ?? ""} · ${req.width ?? ""}x${req.height ?? ""} · ${req.num_inference_steps ?? ""} steps · CFG ${req.guidance_scale ?? ""} · ${req.use_stable_diffusion_model || ""}`
+            const summary = `Seed ${req.seed ?? ""} Â· ${req.width ?? ""}x${req.height ?? ""} Â· ${req.num_inference_steps ?? ""} steps Â· CFG ${req.guidance_scale ?? ""} Â· ${req.use_stable_diffusion_model || ""}`
             ctx.fillText(summary, padding + 15, y + 53)
             const promptLines = wrapText(ctx, req.prompt || task.prompt || "", width - padding * 2 - 30).slice(0, 2)
             promptLines.forEach((line, lineIndex) => ctx.fillText(line, padding + 15, y + 78 + lineIndex * 20))
@@ -680,7 +708,7 @@
                 }
                 ctx.fillStyle = "#d8d8d8"
                 ctx.font = "14px sans-serif"
-                ctx.fillText(labelParts.join(" · ") || `Output ${imageIndex + 1}`, x, top + drawHeight + 20)
+                ctx.fillText(labelParts.join(" Â· ") || `Output ${imageIndex + 1}`, x, top + drawHeight + 20)
             }
             const rows = Math.max(1, Math.ceil(images.length / 4))
             y += rows * (imageMaxHeight + 44 + imageGap) + taskGap
@@ -715,7 +743,7 @@
         const mdName = `${timestamp}.md`
         const originalHtml = button.innerHTML
         button.disabled = true
-        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span> Capturing…</span>'
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span> Capturingâ€¦</span>'
 
         try {
             const metadata = await collectMetadata(tasks, timestamp)

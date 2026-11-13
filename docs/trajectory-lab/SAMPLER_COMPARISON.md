@@ -20,7 +20,9 @@ If Heun removes a recurring artifact in the cyberdino reference, that is a legit
 
 Multi-sampler mode creates separate tasks; it does not try to splice different samplers into one trajectory. Therefore each sampler gets its own Output After Step observations and its own final output.
 
-The current Output After Step backend intentionally supports only the classified fixed-step k-diffusion subset. If an additional sampler is selected that is not yet supported by Output After Step while intermediate output is active, that task fails explicitly rather than silently changing semantics.
+Output After Step supports the classified fixed-step k-diffusion subset plus
+DDIM, PLMS and UniPC through family-specific adapters. Other samplers fail
+explicitly when intermediate output is requested.
 
 Current supported set:
 
@@ -33,8 +35,14 @@ Current supported set:
 - `euler_a`
 - `heun`
 - `lms`
+- `ddim`, `plms`
+- `unipc_snr`, `unipc_tu`, `unipc_tq`, `unipc_snr_2`, `unipc_tu_2`
 
 ### Confirmed compatibility-gate failures from the controlled sampler sweep
+
+This section records the earlier sweep. DDIM, PLMS and UniPC capture have since
+been implemented; see [current sampler support and bends](SAMPLER_OUTPUT_AND_BENDS.md).
+DPM Adaptive and Stability DPM Solver remain blocked for intermediate output.
 
 These are **not sampler-generation failures**. They are confirmed rejections by FlexDiffusion's current Output After Step compatibility gate because their callback/step semantics have not yet been adapted:
 

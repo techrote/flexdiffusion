@@ -28,13 +28,28 @@ jobs:
           ui/easydiffusion/trajectory_artifacts.py
           ui/easydiffusion/trajectory_types.py
           ui/easydiffusion/output_steps.py
+          ui/easydiffusion/circuit_bend.py
+          ui/easydiffusion/sampler_adapters.py
+          ui/easydiffusion/sampler_mixing.py
           ui/easydiffusion/types.py
           ui/easydiffusion/backends/sdkit_common.py
           ui/easydiffusion/tasks/render_images.py
           scripts/trajectory_smoke.py
+          scripts/sample_render_policy.py
+          scripts/build_step_viewer.py
+          scripts/export_step_gif.py
+          scripts/render_seed_bends.py
+          scripts/render_plms_character_grid.py
+          scripts/validate_circuit_bends.py
+          scripts/validate_sampler_adapters.py
       - name: Check Trajectory Lab UI plugin syntax
         run: |
           node --check ui/plugins/ui/trajectory-output-steps.plugin.js
+          node --check ui/plugins/ui/circuit-bend.plugin.js
+          node --check ui/plugins/ui/circuit-bend-grid.plugin.js
+          node tests/test_circuit_bend_ui.js
+          node --check scripts/step_viewer.js
+          node tests/test_step_viewer.js
           node --check ui/plugins/ui/sampler-comparison.plugin.js
           node --check ui/plugins/ui/benchmark-run.plugin.js
           node --check ui/plugins/ui/review-capture.plugin.js

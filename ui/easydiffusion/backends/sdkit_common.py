@@ -1,12 +1,13 @@
 from sdkit import Context
 
 from easydiffusion.output_steps import (
-    FIXED_STEP_K_DIFFUSION_SAMPLERS,
     OutputAfterStepCollector,
     normalize_intermediate_representation,
     normalize_output_after_step,
 )
 from easydiffusion.types import UserInitiatedStop
+from easydiffusion.circuit_bend import CircuitBendOptions, ExperimentalSamplingStopped
+from easydiffusion.sampler_adapters import CAPTURE_SAMPLERS, LDM_SAMPLERS, UNIPC_SAMPLERS, sampling_session
 from easydiffusion.utils import log
 
 from sdkit.utils import (
@@ -84,80 +85,6 @@ def set_options(context, **kwargs):
             opts[key] = kwargs[key]
 
 
-def _install_kdiff_callback_state_bridge():
-    """Temporarily expose k-diffusion's full callback state to Easy Diffusion.
-
-    sdkit 0.0.12's classic adapter currently reduces the k-diffusion callback
-    dictionary to ``callback(info["x"], info["i"])``. For Output After Step we
-    also need ``info["denoised"]``. Reproduce the tiny pinned adapter here while
-    this render is active, forwarding the original callback dictionary as a
-    third argument. The caller restores the original function immediately after
-    sampling, so ordinary classic renders retain upstream behaviour.
-    """
-    from sdkit.generate.sampler import k_samplers as sdkit_k_samplers
-
-    original_sample = sdkit_k_samplers.sample
-
-    def sample_with_callback_state(
-        context,
-        sampler_name=None,
-        noise=None,
-        batch_size=1,
-        shape=(),
-        steps=50,
-        cond=None,
-        uncond=None,
-        guidance_scale=0.8,
-        callback=None,
-        **kwargs,
-    ):
-        model = context.models["stable-diffusion"]
-        denoiser = (
-            sdkit_k_samplers.k_diffusion.external.CompVisVDenoiser
-            if model.parameterization == "v"
-            else sdkit_k_samplers.k_diffusion.external.CompVisDenoiser
-        )
-        wrapped_model = sdkit_k_samplers.DenoiserWrap(denoiser(model))
-        sigmas = wrapped_model.inner_model.get_sigmas(steps)
-
-        sample_fn = sdkit_k_samplers.samplers.get(sampler_name)
-        x_latent = noise
-        x_latent *= sigmas[0]
-
-        params = {
-            "model": wrapped_model,
-            "x": x_latent,
-            "callback": (
-                lambda info: callback(info["x"], info["i"], info)
-                if callback is not None
-                else None
-            ),
-            "extra_args": {
-                "uncond": uncond,
-                "cond": cond,
-                "guidance_scale": guidance_scale,
-            },
-        }
-
-        if sampler_name in ("dpm_fast", "dpm_adaptive"):
-            params["sigma_min"] = sigmas[-2]
-            params["sigma_max"] = sigmas[0]
-            if sampler_name == "dpm_fast":
-                params["n"] = steps - 1
-        else:
-            params["sigmas"] = sigmas
-
-        return sample_fn(**params)
-
-    sdkit_k_samplers.sample = sample_with_callback_state
-
-    def restore():
-        if sdkit_k_samplers.sample is sample_with_callback_state:
-            sdkit_k_samplers.sample = original_sample
-
-    return restore
-
-
 def _decode_output_step_snapshots(context, collector):
     """Decode owned CPU snapshots sequentially after denoising has finished."""
     output_format = opts.get("output_format", "jpeg")
@@ -180,6 +107,11 @@ def _decode_output_step_snapshots(context, collector):
                     "step": completed_step,
                     "representation": representation,
                     "images": encoded,
+                    "metadata": {
+                        **collector.snapshot_metadata.get((completed_step, representation), {}),
+                        "requested_steps": collector.requested_steps,
+                        "actual_steps": collector.total_steps,
+                    },
                 }
             )
         finally:
@@ -209,6 +141,11 @@ def generate_images(
 
     # This context is reused between jobs. Always clear prior transient outputs.
     context.output_step_results = []
+    context.sampling_metadata = {}
+    context.output_step_warnings = []
+    bend_data = req.pop("circuit_bend", None)
+    grid_metadata = req.pop("bend_grid", None)
+    bend = CircuitBendOptions.parse_obj(bend_data or {})
     output_after_step = req.pop("output_after_step", None)
     intermediate_representation = req.pop("intermediate_representation", "both")
 
@@ -222,6 +159,9 @@ def generate_images(
     if req["init_image"] is not None and not context.test_diffusers:
         req["sampler_name"] = "ddim"
 
+    bend.validate_render(req.get("sampler_name"), total_steps,
+                         classic=not context.test_diffusers, txt2img=req.get("init_image") is None)
+
     output_after_step = normalize_output_after_step(output_after_step, total_steps)
     intermediate_representation = normalize_intermediate_representation(intermediate_representation)
     if output_after_step < total_steps:
@@ -229,11 +169,11 @@ def generate_images(
             raise RuntimeError("Output After Step currently supports only the classic Easy Diffusion backend")
         if req.get("init_image") is not None:
             raise RuntimeError("Output After Step currently supports txt2img only")
-        if req.get("sampler_name") not in FIXED_STEP_K_DIFFUSION_SAMPLERS:
-            supported = ", ".join(sorted(FIXED_STEP_K_DIFFUSION_SAMPLERS))
+        if req.get("sampler_name") not in CAPTURE_SAMPLERS:
+            supported = ", ".join(sorted(CAPTURE_SAMPLERS))
             raise RuntimeError(
                 f'Output After Step is not yet supported for sampler {req.get("sampler_name")!r}. '
-                f"Supported classic fixed-step k-diffusion samplers: {supported}"
+                f"Supported classic capture samplers: {supported}"
             )
         output_step_collector = OutputAfterStepCollector(
             output_after_step,
@@ -261,11 +201,12 @@ def generate_images(
             "num_inference_steps": req.get("num_inference_steps"),
             "guidance_scale": req.get("guidance_scale"),
             "sampler_name": req.get("sampler_name"),
+            "circuit_bend": bend.dict() if bend.enabled else None,
+            "bend_grid": grid_metadata,
         }
         trajectory_recorder = TrajectoryRecorder(trajectory, total_steps, run_metadata=run_metadata)
 
     images = []
-    restore_kdiff_bridge = None
     try:
         gc(context)
         context.stop_processing = False
@@ -281,28 +222,22 @@ def generate_images(
             output_step_collector=output_step_collector,
         )
 
-        if output_step_collector is not None:
-            restore_kdiff_bridge = _install_kdiff_callback_state_bridge()
-        try:
+        adapter_enabled = not context.test_diffusers and req.get("init_image") is None and (
+            output_step_collector is not None or bend.active
+            or req.get("sampler_name") in LDM_SAMPLERS | UNIPC_SAMPLERS
+        )
+        with sampling_session(context, output_step_collector, bend, enabled=adapter_enabled):
             images = generate_images(context, callback=callback, **req)
-        finally:
-            if restore_kdiff_bridge is not None:
-                restore_kdiff_bridge()
-                restore_kdiff_bridge = None
 
         trajectory_status = "complete"
 
-        # Do not interrupt the denoising loop with VAE work. Intermediate
-        # snapshots are tiny SD1.x latents copied to CPU in the callback and
-        # decoded here, one at a time, after the sampler has returned normally.
-        if output_step_collector is not None:
-            try:
-                context.output_step_results = _decode_output_step_snapshots(context, output_step_collector)
-            except Exception as error:
-                context.output_step_results = []
-                log.error(f"Output After Step decode failed: {type(error).__name__}: {error}")
-    except UserInitiatedStop:
+    except (UserInitiatedStop, ExperimentalSamplingStopped) as error:
         trajectory_status = "interrupted"
+        if isinstance(error, ExperimentalSamplingStopped):
+            context.partial_x_samples = error.latent
+            context.sampling_metadata["completed_steps"] = error.completed_steps
+            context.output_step_warnings.append(str(error))
+        context.sampling_metadata["status"] = "interrupted"
         partial_x_samples = getattr(context, "partial_x_samples", None)
         images = []
         if partial_x_samples is not None:
@@ -311,8 +246,15 @@ def generate_images(
             else:
                 images = latent_samples_to_images(context, partial_x_samples)
     finally:
-        if restore_kdiff_bridge is not None:
-            restore_kdiff_bridge()
+        # Decode after denoising, including finite observations from a stopped experiment.
+        if output_step_collector is not None and trajectory_status in {"complete", "interrupted"}:
+            try:
+                context.output_step_results = _decode_output_step_snapshots(context, output_step_collector)
+            except Exception as error:
+                context.output_step_results = []
+                warning = f"Intermediate decode failed: {type(error).__name__}: {error}"
+                context.output_step_warnings.append(warning)
+                log.error(warning)
 
         partial_x_samples = getattr(context, "partial_x_samples", None)
         if partial_x_samples is not None:
@@ -443,6 +385,7 @@ def make_step_callback(context, callback, trajectory_recorder=None, output_step_
         nonlocal output_step_capture_failed
         output_step_capture_failed = True
         log.error(f"Output After Step capture failed at callback step {i}: {type(error).__name__}: {error}")
+        context.output_step_warnings.append(f"Intermediate capture stopped at step {i}: {error}")
 
     def on_step(x_samples, i, *args):
         stream_image_progress = opts.get("stream_image_progress", False)
@@ -481,6 +424,7 @@ def make_step_callback(context, callback, trajectory_recorder=None, output_step_
                     i,
                     x_samples,
                     denoised=callback_state.get("denoised"),
+                    metadata=callback_state.get("observation"),
                 )
             except Exception as error:
                 note_output_step_failure(i, error)
@@ -517,6 +461,7 @@ def make_step_callback(context, callback, trajectory_recorder=None, output_step_
             callback(live_images, i, *args)
 
         if context.stop_processing:
+            context.sampling_metadata["completed_steps"] = i
             raise UserInitiatedStop("User requested that we stop processing")
 
     return on_step

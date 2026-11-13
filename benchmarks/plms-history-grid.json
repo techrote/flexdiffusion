@@ -1,0 +1,31 @@
+{
+  "schema": "flexdiffusion-bend-grid/v1",
+  "request": {
+    "prompt": "cyberpunk dinosaur mercenary",
+    "original_prompt": "cyberpunk dinosaur mercenary",
+    "negative_prompt": "",
+    "seed": 2,
+    "width": 512,
+    "height": 512,
+    "num_outputs": 1,
+    "num_inference_steps": 20,
+    "guidance_scale": 7.5,
+    "sampler_name": "plms",
+    "use_stable_diffusion_model": "sd-v1-4",
+    "circuit_bend": {
+      "enabled": true,
+      "mode": "plms_history",
+      "history_strength": 0.5,
+      "window_unit": "percent",
+      "start": 25,
+      "end": 75,
+      "every": 1,
+      "fade_in": 20,
+      "fade_out": 25
+    }
+  },
+  "x": { "key": "history_strength", "values": [0, 0.5, 1] },
+  "y": { "key": "fade_out", "values": [0, 50] },
+  "seeds": [2, 3, 4, 5],
+  "baseline": true
+}

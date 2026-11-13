@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import time
 import regex
@@ -34,6 +35,8 @@ TASK_TEXT_MAPPING = {
     "control_alpha": "ControlNet Strength",
     "use_vae_model": "VAE model",
     "sampler_name": "Sampler",
+    "circuit_bend": "Circuit Bend",
+    "bend_grid": "Bend Grid",
     "scheduler_name": "Scheduler",
     "width": "Width",
     "height": "Height",
@@ -221,6 +224,8 @@ def get_metadata_entries_for_request(
     if is_txt_format:
 
         def format_value(value):
+            if isinstance(value, dict):
+                return json.dumps(value, sort_keys=True)
             if isinstance(value, list):
                 return ", ".join([str(it) for it in value])
             return value
@@ -266,6 +271,11 @@ def get_printable_request(
             metadata["use_embeddings_model"] = embeddings_used if len(embeddings_used) > 0 else None
 
     # Clean up the metadata
+    bend = metadata.get("circuit_bend")
+    if not bend or not bend.get("enabled"):
+        metadata.pop("circuit_bend", None)
+    if not metadata.get("bend_grid"):
+        metadata.pop("bend_grid", None)
     if req.init_image is None and "prompt_strength" in metadata:
         del metadata["prompt_strength"]
     if task_data.use_upscale is None and "upscale_amount" in metadata:
