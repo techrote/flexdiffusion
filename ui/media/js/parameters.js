@@ -488,6 +488,8 @@ async function getAppConfig() {
         if (typeof config.auto_vram_safety === "boolean") {
             autoVramSafetyField.checked = config.auto_vram_safety
         }
+        vramUsageLevelField.dispatchEvent(new Event("change"))
+        autoVramSafetyField.dispatchEvent(new Event("change"))
 
         // custom overrides
         if (config.update_branch === "beta") {
