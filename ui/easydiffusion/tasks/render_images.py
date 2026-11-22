@@ -103,7 +103,7 @@ class RenderTask(Task):
                 self.task_data.enable_vae_tiling = True
 
             if advice.recommended != advice.requested:
-                if config.get("backend") in ("ed_classic", "ed_diffusers"):
+                if getattr(backend, "__name__", config.get("backend")) in ("ed_classic", "ed_diffusers"):
                     self.task_data.vram_usage_level = advice.recommended
                     log.info(
                         f"Auto VRAM safety: {advice.requested} -> {advice.recommended} "
@@ -116,7 +116,7 @@ class RenderTask(Task):
                     log.warn(
                         f"VRAM preflight recommends {advice.recommended} instead of "
                         f"{advice.requested} on {context.device_name}, but the "
-                        f"{config.get('backend')} backend requires a restart to change "
+                        f"{getattr(backend, '__name__', config.get('backend'))} backend requires a restart to change "
                         f"memory profile. Only live preview/VAE safeguards applied."
                     )
 
