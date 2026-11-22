@@ -32,14 +32,20 @@ def init(device):
     device_manager.device_init(context, device)
 
 
-def set_vram_optimizations(context):
+def set_vram_optimizations(context, requested_level=None):
+    """Set the effective profile for THIS worker and task.
+
+    The global config is only a default for startup; queued requests may each
+    have a different profile, including an automatically derated one.
+    """
     from easydiffusion.app import getConfig
 
-    config = getConfig()
-    vram_usage_level = config.get("vram_usage_level", "balanced")
+    level = requested_level if requested_level is not None else getConfig().get("vram_usage_level", "balanced")
+    if level not in ("high", "balanced", "low"):
+        raise ValueError(f"Unknown GPU memory profile: {level!r}")
 
-    if hasattr(context, "vram_usage_level") and vram_usage_level != context.vram_usage_level:
-        context.vram_usage_level = vram_usage_level
+    if hasattr(context, "vram_usage_level") and level != context.vram_usage_level:
+        context.vram_usage_level = level
         return True
 
     return False
