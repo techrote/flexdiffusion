@@ -33,7 +33,7 @@ class TestVramSafety(unittest.TestCase):
     def test_roomy_gpu_does_not_derate_sd1(self):
         self.assertEqual(self.advise(total_vram_gb=16).recommended, "high")
 
-    def test_midrange_gpu_moderate_image_derates_one_level(self):
+    def test_midrange_gpu_768_does_not_derate_unnecessarily(self):
         advice = self.advise(width=768, height=768, total_vram_gb=6.0)
         self.assertEqual((advice.risk, advice.recommended), ("normal", "high"))
 
