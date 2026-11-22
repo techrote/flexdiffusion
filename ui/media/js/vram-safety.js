@@ -19,15 +19,15 @@ var VramSafety = (function () {
         if (
             (total < 4.5 && pixels >= 768 * 768) ||
             (total < 6.5 && pixels >= 1024 * 1024) ||
-            (total < 8.5 && largeModel && pixels >= 768 * 768) ||
+            (total < 8.9 && largeModel && pixels >= 768 * 768) ||
             (total < 6.5 && outputs > 1 && pixels >= 512 * 512)
         ) {
             risk = "high"
         } else if (
             (total < 4.5 && pixels >= 512 * 512) ||
-            (total < 8.5 && pixels >= 1024 * 1024) ||
-            (total < 8.5 && largeModel) ||
-            (total < 8.5 && outputs > 1 && pixels >= 768 * 768)
+            (total < 8.9 && pixels >= 1024 * 1024) ||
+            (total < 8.9 && largeModel) ||
+            (total < 8.9 && outputs > 1 && pixels >= 768 * 768)
         ) {
             risk = "elevated"
         }
