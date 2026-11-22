@@ -469,6 +469,21 @@
                         </div>
                         <div id="small_image_warning" class="displayNone warning-label">Small image sizes can cause bad image quality</div>
                     </td></tr>
+                    <tr class="pl-5" id="gpu-memory-row">
+                        <td><label for="vram_usage_level">GPU Memory Usage:</label></td>
+                        <td>
+                            <select id="vram_usage_level" name="vram_usage_level" aria-label="GPU Memory Usage">
+                                <option value="high">High</option>
+                                <option value="balanced" selected>Balanced</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <label for="auto_vram_safety" style="margin-left: 0.7em;">
+                                <input id="auto_vram_safety" name="auto_vram_safety" type="checkbox" checked>
+                                Auto-derate risky jobs
+                            </label>
+                            <div><small id="vram-safety-note">Auto safety checks image size, model and GPU capacity when rendering starts; it can reduce VRAM settings, serialise output batches and disable live previews without shrinking the image. Some backends require restart for profile changes.</small></div>
+                        </td>
+                    </tr>
                     <tr class="pl-5"><td><label for="num_inference_steps">Inference Steps:</label></td><td> <input id="num_inference_steps" name="num_inference_steps" type="number" min="1" step="1" style="width: 42pt" value="25" onkeypress="preventNonNumericalInput(event)" inputmode="numeric"></td></tr>
                     <tr class="pl-5 warning-label displayNone" id="fluxSchedulerStepsWarning"><td>Tip:</td><td>This scheduler needs 15 steps or more</td></tr>
                     <tr class="pl-5"><td><label for="guidance_scale_slider">Guidance Scale <small>(<abbr title="Also known as CFG Scale (Classifier-Free Guidance). Controls the influence of your prompt during generation.">?</abbr>)</small>:</label></td><td> <input id="guidance_scale_slider" name="guidance_scale_slider" class="editor-slider" value="75" type="range" min="11" max="500"> <input id="guidance_scale" name="guidance_scale" size="4" pattern="^[0-9\.]+$" onkeypress="preventNonNumericalInput(event)" inputmode="decimal"></td></tr>
@@ -970,6 +985,7 @@
 <script src="media/js/searchable-models.js"></script>
 <script src="media/js/multi-model-selector.js"></script>
 <script src="media/js/task-manager.js"></script>
+<script src="media/js/vram-safety.js"></script>
 <script src="media/js/main.js"></script>
 <script src="media/js/plugins.js"></script>
 <script src="media/js/themes.js"></script>
