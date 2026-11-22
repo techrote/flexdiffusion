@@ -485,9 +485,6 @@ async function getAppConfig() {
 
         // These generation controls live beside Image Size rather than inside System Settings.
         vramUsageLevelField.value = config.vram_usage_level || "balanced"
-        if (typeof config.auto_vram_safety === "boolean") {
-            autoVramSafetyField.checked = config.auto_vram_safety
-        }
         vramUsageLevelField.dispatchEvent(new Event("change"))
         autoVramSafetyField.dispatchEvent(new Event("change"))
 
@@ -805,7 +802,6 @@ saveSettingsBtn.addEventListener("click", function () {
         render_devices: getCurrentRenderDeviceSelection(),
         update_branch: updateBranch,
         vram_usage_level: vramUsageLevelField.value,
-        auto_vram_safety: autoVramSafetyField.checked,
     }
 
     document.querySelectorAll("#system-settings [data-setting-id]").forEach((parameterRow) => {
