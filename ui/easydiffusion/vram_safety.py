@@ -64,16 +64,16 @@ def advise_vram(
     if (
         (total < 4.5 and pixels >= 768 * 768)
         or (total < 6.5 and pixels >= 1024 * 1024)
-        or (total < 8.5 and large_model and pixels >= 768 * 768)
+        or (total < 8.9 and large_model and pixels >= 768 * 768)
         or (total < 6.5 and outputs > 1 and pixels >= 512 * 512)
     ):
         risk, cap = "high", "low"
         reason = "Large image, demanding model and/or parallel outputs relative to installed VRAM"
     elif (
         (total < 4.5 and pixels >= 512 * 512)
-        or (total < 8.5 and pixels >= 1024 * 1024)
-        or (total < 8.5 and large_model)
-        or (total < 8.5 and outputs > 1 and pixels >= 768 * 768)
+        or (total < 8.9 and pixels >= 1024 * 1024)
+        or (total < 8.9 and large_model)
+        or (total < 8.9 and outputs > 1 and pixels >= 768 * 768)
     ):
         risk, cap = "elevated", "balanced"
         reason = "Workload may put pressure on available VRAM"
