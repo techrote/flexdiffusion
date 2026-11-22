@@ -1316,6 +1316,13 @@ function createTask(task) {
     return taskEntry.id
 }
 
+// Cache active-device capacity; the server repeats the assessment on the
+// actual worker GPU at task start rather than trusting this browser estimate.
+let vramSafetyDeviceInfo = null
+document.addEventListener("system_info_update", (event) => {
+    vramSafetyDeviceInfo = event.detail
+})
+
 function getCurrentUserRequest() {
     const numOutputsTotal = parseInt(numOutputsTotalField.value)
     let numOutputsParallel = parseInt(numOutputsParallelField.value)
@@ -1337,6 +1344,21 @@ function getCurrentUserRequest() {
     width = width - (width % IMAGE_STEP_SIZE)
     height = height - (height % IMAGE_STEP_SIZE)
 
+    const vramSafetyEnabled = autoVramSafetyField.checked
+    const safetyAdvice = vramSafetyEnabled
+        ? VramSafety.assess({
+              width,
+              height,
+              numOutputs: numOutputsParallel,
+              modelName: stableDiffusionModelField.value,
+              totalVramGb: VramSafety.getConservativeGpuTotalGb(vramSafetyDeviceInfo),
+          })
+        : null
+    if (safetyAdvice && safetyAdvice.serialOutputs) {
+        // Preserve the total requested images; submit as separate one-image batches.
+        numOutputsParallel = 1
+    }
+
     const newTask = {
         batchesDone: 0,
         numOutputsTotal: numOutputsTotal,
@@ -1353,13 +1375,14 @@ function getCurrentUserRequest() {
             height: height,
             // allow_nsfw: allowNSFWField.checked,
             vram_usage_level: vramUsageLevelField.value,
+            auto_vram_safety: vramSafetyEnabled,
             sampler_name: samplerField.value,
             //render_device: undefined, // Set device affinity. Prefer this device, but wont activate.
             use_stable_diffusion_model: stableDiffusionModelField.value,
             clip_skip: clipSkipField.checked,
             use_vae_model: vaeModelField.value,
             stream_progress_updates: true,
-            stream_image_progress: numOutputsTotal > 50 ? false : streamImageProgressField.checked,
+            stream_image_progress: numOutputsTotal > 50 ? false : (streamImageProgressField.checked && !(safetyAdvice && safetyAdvice.disableLivePreview)),
             show_only_filtered_image: showOnlyFilteredImageField.checked,
             block_nsfw: blockNSFWField.checked,
             output_format: outputFormatField.value,
@@ -3252,7 +3275,7 @@ document.addEventListener("on_render_task_fail", (e) => {
                     <b>Suggestions</b>:
                     <br/>
                     1. If you have set an initial image, please try reducing its dimension to ${MAX_INIT_IMAGE_DIMENSION}x${MAX_INIT_IMAGE_DIMENSION} or smaller.<br/>
-                    2. Try picking a lower level in the '<em>GPU Memory Usage</em>' setting (in the '<em>Settings</em>' tab).<br/>
+                    2. Try picking a lower level in '<em>GPU Memory Usage</em>' (next to Image Size on Generate), and enable Auto-derate risky jobs.<br/>
                     3. Try generating a smaller image.<br/>`
         } else if (msg.includes("DefaultCPUAllocator: not enough memory")) {
             msg += `<br/><br/>

@@ -73,7 +73,8 @@ class TaskData(BaseModel):
 
 
 class RenderTaskData(TaskData):
-    vram_usage_level: str = "balanced"  # or "low" or "medium"
+    vram_usage_level: str = "balanced"  # low, balanced or high
+    auto_vram_safety: bool = False  # opt-in for external API callers; UI defaults on
 
     use_face_correction: Union[str, List[str]] = None  # or "GFPGANv1.3"
     use_upscale: Union[str, List[str]] = None

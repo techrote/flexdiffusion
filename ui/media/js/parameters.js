@@ -151,24 +151,6 @@ var PARAMETERS = [
         saveInAppConfig: true,
     },
     {
-        id: "vram_usage_level",
-        type: ParameterType.select,
-        label: "GPU Memory Usage",
-        note:
-            "Faster performance requires more GPU memory (VRAM)<br/><br/>" +
-            "<b>Balanced:</b> nearly as fast as High, much lower VRAM usage<br/>" +
-            "<b>High:</b> fastest, maximum GPU memory usage</br>" +
-            "<b>Low:</b> slowest, recommended for GPUs with 3 to 4 GB memory",
-        icon: "fa-forward",
-        default: "balanced",
-        saveInAppConfig: true,
-        options: [
-            { value: "balanced", label: "Balanced" },
-            { value: "high", label: "High" },
-            { value: "low", label: "Low" },
-        ],
-    },
-    {
         id: "use_cpu",
         type: ParameterType.checkbox,
         label: "Use CPU (not GPU)",
@@ -440,6 +422,7 @@ PARAMETERS.addEventListener("push", (...items) => {
 })
 
 let vramUsageLevelField = document.querySelector("#vram_usage_level")
+let autoVramSafetyField = document.querySelector("#auto_vram_safety")
 let useCPUField = document.querySelector("#use_cpu")
 let autoPickGPUsField = document.querySelector("#auto_pick_gpus")
 let useGPUsField = document.querySelector("#use_gpus")
@@ -499,6 +482,11 @@ async function getAppConfig() {
         const config = await res.json()
 
         applySettingsFromConfig(config)
+
+        // These generation controls live beside Image Size rather than inside System Settings.
+        vramUsageLevelField.value = config.vram_usage_level || "balanced"
+        vramUsageLevelField.dispatchEvent(new Event("change"))
+        autoVramSafetyField.dispatchEvent(new Event("change"))
 
         // custom overrides
         if (config.update_branch === "beta") {
@@ -813,6 +801,7 @@ saveSettingsBtn.addEventListener("click", function () {
     const updateAppConfigRequest = {
         render_devices: getCurrentRenderDeviceSelection(),
         update_branch: updateBranch,
+        vram_usage_level: vramUsageLevelField.value,
     }
 
     document.querySelectorAll("#system-settings [data-setting-id]").forEach((parameterRow) => {

@@ -72,8 +72,56 @@ class RenderTask(Task):
         task_manager.current_state = task_manager.ServerStates.LoadingModel
         model_manager.resolve_model_paths(self.models_data)
 
+        # Assess each queued job on the GPU that actually claimed it, not on
+        # the browser and not against a mutable global setting.
+        if self.task_data.auto_vram_safety:
+            from easydiffusion.vram_safety import advise_vram
+            from sdkit.utils import is_cpu_device, mem_get_info
+
+            total_vram_gb = None
+            try:
+                if not is_cpu_device(context.torch_device):
+                    _, total_bytes = mem_get_info(context.torch_device)
+                    if total_bytes and total_bytes > 0:
+                        total_vram_gb = total_bytes / 1e9
+            except Exception as exc:
+                log.warn(f"VRAM preflight could not query the active device: {exc}")
+
+            advice = advise_vram(
+                requested=self.task_data.vram_usage_level,
+                width=self.render_request.width,
+                height=self.render_request.height,
+                num_outputs=self.render_request.num_outputs,
+                model_name=str((self.models_data.model_paths or {}).get("stable-diffusion", "")),
+                total_vram_gb=total_vram_gb,
+                enabled=True,
+            )
+            if advice.risk == "high":
+                # Both safeguards can be applied without changing the image
+                # dimensions or requiring a model/backend restart.
+                self.task_data.stream_image_progress = False
+                self.task_data.enable_vae_tiling = True
+
+            if advice.recommended != advice.requested:
+                if getattr(backend, "__name__", config.get("backend")) in ("ed_classic", "ed_diffusers"):
+                    self.task_data.vram_usage_level = advice.recommended
+                    log.info(
+                        f"Auto VRAM safety: {advice.requested} -> {advice.recommended} "
+                        f"on {context.device_name}: {advice.reason}"
+                    )
+                else:
+                    # SDKit3 / Forge memory profiles are launch-time flags.
+                    # Pretending they change here would leave a risky job
+                    # running under the old profile.
+                    log.warn(
+                        f"VRAM preflight recommends {advice.recommended} instead of "
+                        f"{advice.requested} on {context.device_name}, but the "
+                        f"{getattr(backend, '__name__', config.get('backend'))} backend requires a restart to change "
+                        f"memory profile. Only live preview/VAE safeguards applied."
+                    )
+
         models_to_force_reload = []
-        if runtime.set_vram_optimizations(context) or self.has_param_changed(context, "clip_skip"):
+        if runtime.set_vram_optimizations(context, self.task_data.vram_usage_level) or self.has_param_changed(context, "clip_skip"):
             models_to_force_reload.append("stable-diffusion")
 
         model_manager.reload_models_if_necessary(context, self.models_data, models_to_force_reload)

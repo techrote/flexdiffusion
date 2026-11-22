@@ -46,6 +46,7 @@ const SETTINGS_IDS_LIST = [
     "diskPath",
     "sound_toggle",
     "vram_usage_level",
+    "auto_vram_safety",
     "confirm_dangerous_actions",
     "profileName",
     "metadata_output_format",
